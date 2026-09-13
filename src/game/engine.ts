@@ -120,6 +120,7 @@ export class Game {
   private stars: Star[] = [];
   private wobble = 0;
   private warnCooldown = 0;
+  private miniPanelW = 0; // smoothed minimap panel width (adapts to the tower's real proportions)
 
   private W = 0;
   private H = 0;
@@ -648,42 +649,77 @@ export class Game {
   }
 
   /**
-   * Right-side vertical overview: the whole tower (base → current top) scaled to
-   * fit, so it stays visible even when the main camera has climbed past it. Each
-   * block is drawn in its real colour (simplified to its footprint), and a box
-   * marks the slice the main camera is currently showing. Compact/hidden on
-   * narrow screens so it never covers the play field, HUD or buttons.
+   * Right-side overview: a true, shrunk-down replica of the whole tower (pedestal
+   * base → current tip). Crucially it uses ONE uniform scale for both x and y —
+   * `min(innerW / towerWidth, innerH / towerHeight)` — so every block keeps its
+   * real width, height, tilt and sideways offset (a lopsided tower reads as a
+   * lopsided miniature; wide blocks stay wide, narrow blocks stay narrow). The
+   * panel width adapts to the tower's real aspect ratio (a short/wide stack gets
+   * a wider panel, a tall stack a narrow one) but stays clamped to a responsive
+   * range so it never covers the play field, HUD or buttons. A box marks the
+   * slice the main camera is currently showing. Compact/hidden on narrow screens.
    */
   private drawMinimap() {
     if (this.phase === "home") return;
     if (this.W < 460) return; // too narrow (mobile) — hide entirely
     const ctx = this.ctx;
-    const compact = this.W < 760;
-    const panelW = compact ? 40 : 58;
+
+    // --- panel vertical extent (clears top HUD and bottom controls) ---
     const margin = 12;
-    const px = this.W - panelW - margin;
-    const pTop = 118; // clears the top HUD (height / next / blocks)
-    const pBottom = this.H - (this.phase === "playing" ? 118 : 32); // clears bottom controls
+    const pTop = 118;
+    const pBottom = this.H - (this.phase === "playing" ? 118 : 32);
     const pH = pBottom - pTop;
     if (pH < 150) return; // not enough vertical room -> skip
-
-    // vertical world range: base of the pedestal up to the highest block (+headroom)
-    const baseY = PLATFORM_TOP_Y + PLATFORM_HEIGHT;
-    let topWorld = PLATFORM_TOP_Y;
-    for (const b of this.blocks) topWorld = Math.min(topWorld, b.body.bounds.min.y);
-    if (this.active) topWorld = Math.min(topWorld, this.active.body.bounds.min.y);
-    topWorld -= 46; // headroom above the tip
-    const worldSpan = Math.max(baseY - topWorld, 260);
-
-    // fixed horizontal range so the tower doesn't slide sideways as it grows
-    const halfX = AIM_RANGE + 34;
-
-    const padX = 6;
-    const padY = 8;
-    const innerW = panelW - padX * 2;
+    const padX = 8;
+    const padY = 10;
     const innerH = pH - padY * 2;
-    const mx = (wx: number) => px + padX + ((wx + halfX) / (halfX * 2)) * innerW;
-    const my = (wy: number) => pTop + padY + ((wy - topWorld) / worldSpan) * innerH;
+
+    // --- world bounding box of the WHOLE tower (pedestal base → highest tip) ---
+    const baseY = PLATFORM_TOP_Y + PLATFORM_HEIGHT; // bottom of the pedestal
+    let minX = -PLATFORM_WIDTH / 2;
+    let maxX = PLATFORM_WIDTH / 2;
+    let topWorld = PLATFORM_TOP_Y;
+    for (const b of this.blocks) {
+      minX = Math.min(minX, b.body.bounds.min.x);
+      maxX = Math.max(maxX, b.body.bounds.max.x);
+      topWorld = Math.min(topWorld, b.body.bounds.min.y);
+    }
+    if (this.active) {
+      minX = Math.min(minX, this.active.body.bounds.min.x);
+      maxX = Math.max(maxX, this.active.body.bounds.max.x);
+      topWorld = Math.min(topWorld, this.active.body.bounds.min.y);
+    }
+    // a little breathing room around the tower's real footprint
+    minX -= 10;
+    maxX += 10;
+    topWorld -= 24;
+    const towerW = Math.max(maxX - minX, 1);
+    const towerH = Math.max(baseY - topWorld, 1);
+
+    // --- adaptive panel width: derive from the height-limited scale so the true
+    //     (uniformly scaled) miniature fits without wasting/cramping space, then
+    //     clamp to a responsive range that keeps the panel out of the way. ---
+    const compact = this.W < 760;
+    const desiredInnerW = towerW * (innerH / towerH);
+    const minInnerW = compact ? 28 : 42;
+    const maxInnerW = Math.min(compact ? 84 : 140, this.W * (compact ? 0.24 : 0.2));
+    const targetPanelW = Math.max(minInnerW, Math.min(maxInnerW, desiredInnerW)) + padX * 2;
+    // smooth width changes so adding blocks doesn't make the panel jump around
+    this.miniPanelW = this.miniPanelW > 0 ? this.miniPanelW + (targetPanelW - this.miniPanelW) * 0.16 : targetPanelW;
+    const panelW = Math.round(this.miniPanelW);
+    const px = this.W - panelW - margin;
+    const innerW = panelW - padX * 2;
+
+    // ONE uniform scale for x AND y — this is what makes it a real replica.
+    const scale = Math.min(innerW / towerW, innerH / towerH);
+
+    // horizontally centre the tower's bbox; stand it on the panel floor so it
+    // grows upward like the real thing (base anchored to the bottom).
+    const midX = (minX + maxX) / 2;
+    const cx = px + panelW / 2;
+    const floorY = pBottom - padY;
+    const mx = (wx: number) => cx + (wx - midX) * scale;
+    const my = (wy: number) => floorY - (baseY - wy) * scale;
 
     ctx.save();
     // panel background
@@ -706,35 +742,69 @@ export class Game {
     ctx.lineWidth = 1.2;
     ctx.strokeRect(px + 2, viewTop, panelW - 4, viewBot - viewTop);
 
-    // pedestal at the base
+    // pedestal — real footprint at the uniform scale
     const pl = mx(-PLATFORM_WIDTH / 2);
     const pr = mx(PLATFORM_WIDTH / 2);
-    const pby = my(PLATFORM_TOP_Y);
+    const pTopY = my(PLATFORM_TOP_Y);
+    const pBotY = my(baseY);
     ctx.fillStyle = "rgba(120,150,220,0.55)";
-    ctx.fillRect(pl, pby, pr - pl, Math.max(2, my(baseY) - pby));
+    ctx.fillRect(pl, pTopY, pr - pl, Math.max(2, pBotY - pTopY));
 
-    // blocks (real colour, simplified to footprint)
-    for (const b of this.blocks) {
-      const l = mx(b.body.bounds.min.x);
-      const r = mx(b.body.bounds.max.x);
-      const t = my(b.body.bounds.min.y);
-      const btm = my(b.body.bounds.max.y);
-      ctx.fillStyle = b.spec.color;
-      ctx.fillRect(l, t, Math.max(1.6, r - l), Math.max(1.6, btm - t));
-    }
-    // the in-flight block, dimmer
-    if (this.active) {
-      const b = this.active;
-      const l = mx(b.body.bounds.min.x);
-      const r = mx(b.body.bounds.max.x);
-      const t = my(b.body.bounds.min.y);
-      const btm = my(b.body.bounds.max.y);
-      ctx.globalAlpha = 0.7;
-      ctx.fillStyle = b.spec.color;
-      ctx.fillRect(l, t, Math.max(1.6, r - l), Math.max(1.6, btm - t));
-      ctx.globalAlpha = 1;
-    }
+    // blocks — real shape (footprint polygon / circle), real colour, real tilt
+    for (const b of this.blocks) this.drawMinimapBlock(ctx, b, mx, my, scale, 1);
+    if (this.active) this.drawMinimapBlock(ctx, this.active, mx, my, scale, 0.7);
+
     ctx.restore();
+  }
+
+  /** Draw one block into the minimap at the uniform scale, preserving its actual
+   *  footprint (vertices) and orientation — not just a bounding bar. */
+  private drawMinimapBlock(
+    ctx: CanvasRenderingContext2D,
+    b: Block,
+    mx: (x: number) => number,
+    my: (y: number) => number,
+    scale: number,
+    alpha: number,
+  ) {
+    const { body, spec } = b;
+    const wpx = (body.bounds.max.x - body.bounds.min.x) * scale;
+    const hpx = (body.bounds.max.y - body.bounds.min.y) * scale;
+    const stroke = Math.min(wpx, hpx) > 5; // outline only when big enough to read
+    ctx.globalAlpha = alpha;
+    ctx.fillStyle = spec.color;
+
+    if (spec.radius != null) {
+      const ccx = mx(body.position.x);
+      const ccy = my(body.position.y);
+      const r = Math.max(1, spec.radius * scale);
+      ctx.beginPath();
+      ctx.arc(ccx, ccy, r, 0, Math.PI * 2);
+      ctx.fill();
+      if (stroke) {
+        ctx.strokeStyle = darken(spec.color, 0.3);
+        ctx.lineWidth = 0.75;
+        ctx.stroke();
+      }
+      ctx.globalAlpha = 1;
+      return;
+    }
+
+    const parts = body.parts.length > 1 ? body.parts.slice(1) : [body];
+    for (const part of parts) {
+      const v = part.vertices;
+      ctx.beginPath();
+      ctx.moveTo(mx(v[0].x), my(v[0].y));
+      for (let i = 1; i < v.length; i++) ctx.lineTo(mx(v[i].x), my(v[i].y));
+      ctx.closePath();
+      ctx.fill();
+      if (stroke) {
+        ctx.strokeStyle = darken(spec.color, 0.3);
+        ctx.lineWidth = 0.75;
+        ctx.stroke();
+      }
+    }
+    ctx.globalAlpha = 1;
   }
 
   private drawStars(amount: number) {
