@@ -19,6 +19,7 @@ import {
   TOTAL_BLOCKS,
 } from "./constants";
 import { swingOffset, swingPeriodMs } from "./swing";
+import { dimLabel } from "./dimensions";
 import { darken, lighten, withAlpha } from "./color";
 import {
   altitude01 as altitudeNorm,
@@ -646,6 +647,10 @@ export class Game {
     this.drawPedestal();
 
     for (const b of this.blocks) this.drawBlock(b);
+    // dimension labels drawn in a separate pass so later blocks never cover them
+    if (this.phase !== "home") {
+      for (const b of this.blocks) this.drawBlockDimLabel(b);
+    }
     if (this.awaiting && this.pending && this.phase === "playing") this.drawPreview();
     this.drawParticles();
     this.drawWobbleVignette();
@@ -1043,6 +1048,60 @@ export class Game {
       }
     }
     ctx.restore();
+
+    // prominent size read-out for the block being aimed — sit it just above the
+    // ghost's top so you always know the dimensions before dropping. If that
+    // would clip under the HUD, drop it onto the block centre instead.
+    const topScreen = this.sy(centerY - hbox / 2);
+    let labelY = topScreen - 16;
+    if (labelY < 128) labelY = this.sy(centerY);
+    this.drawDimLabel(dimLabel(spec), this.sx(this.aimX), labelY, true);
+  }
+
+  /** Small size label centred on a settled block (skipped when too small on screen). */
+  private drawBlockDimLabel(b: Block) {
+    if (!b.settled) return;
+    const { body, spec } = b;
+    const wpx = (body.bounds.max.x - body.bounds.min.x) * this.cam.zoom;
+    const hpx = (body.bounds.max.y - body.bounds.min.y) * this.cam.zoom;
+    // too small to carry a readable label -> omit (keeps a tall tower uncluttered)
+    if (Math.min(wpx, hpx) < 24 || wpx < 38) return;
+    const sx = this.sx(body.position.x);
+    const sy = this.sy(body.position.y);
+    if (sx < -80 || sx > this.W + 80 || sy < -24 || sy > this.H + 24) return;
+    this.drawDimLabel(dimLabel(spec), sx, sy, false);
+  }
+
+  /**
+   * Draw a size label as a pill so it reads over any block colour. Text is a
+   * FIXED pixel size (independent of camera zoom) — emphasised labels are larger
+   * and outlined for the block currently being aimed / previewed.
+   */
+  private drawDimLabel(text: string, sx: number, sy: number, emphasis: boolean) {
+    const ctx = this.ctx;
+    const fs = emphasis ? 15 : 11;
+    ctx.save();
+    ctx.font = `700 ${fs}px -apple-system, system-ui, sans-serif`;
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    const padX = emphasis ? 9 : 5;
+    const padY = emphasis ? 5 : 3;
+    const bw = ctx.measureText(text).width + padX * 2;
+    const bh = fs + padY * 2;
+    roundRect(ctx, sx - bw / 2, sy - bh / 2, bw, bh, bh / 2);
+    ctx.fillStyle = emphasis ? "rgba(9,13,32,0.8)" : "rgba(9,13,32,0.62)";
+    ctx.shadowColor = "rgba(0,0,0,0.45)";
+    ctx.shadowBlur = emphasis ? 8 : 4;
+    ctx.fill();
+    ctx.shadowBlur = 0;
+    if (emphasis) {
+      ctx.strokeStyle = "rgba(255,255,255,0.7)";
+      ctx.lineWidth = 1.2;
+      ctx.stroke();
+    }
+    ctx.fillStyle = emphasis ? "#FFE7B0" : "rgba(255,255,255,0.94)";
+    ctx.fillText(text, sx, sy + 0.5);
+    ctx.restore();
   }
 
   private drawParticles() {
@@ -1131,7 +1190,13 @@ export class Game {
       cleared: this.cleared,
       next:
         this.phase === "playing" && this.nextSpec
-          ? { kind: this.nextSpec.kind, color: this.nextSpec.color }
+          ? {
+              kind: this.nextSpec.kind,
+              color: this.nextSpec.color,
+              w: this.nextSpec.w,
+              h: this.nextSpec.h,
+              radius: this.nextSpec.radius,
+            }
           : null,
     };
     const key = `${hud.phase}|${hud.placed}|${hud.awaitingDrop}|${hud.heightM.toFixed(1)}|${hud.wobble > 0.28}|${hud.next?.kind ?? ""}|${hud.next?.color ?? ""}`;

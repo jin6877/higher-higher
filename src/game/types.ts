@@ -15,6 +15,12 @@ export type ShapeKind =
 export interface BlockPreview {
   kind: ShapeKind;
   color: string;
+  /** bounding-box width in world units (for the size label) */
+  w: number;
+  /** bounding-box height in world units (for the size label) */
+  h: number;
+  /** radius (circle only) in world units */
+  radius?: number;
 }
 
 export interface BlockSpec {

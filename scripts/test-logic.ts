@@ -3,6 +3,7 @@
 
 import { mulberry32 } from "../src/game/rng";
 import { makeBlockSpec, shapePoolFor } from "../src/game/shapes";
+import { dimLabel, formatDim, worldToMeters } from "../src/game/dimensions";
 import { swingOffset, swingPeriodMs } from "../src/game/swing";
 import { sampleSky, altitude01 } from "../src/game/palette";
 import {
@@ -260,6 +261,61 @@ function approx(a: number, b: number, eps = 1e-6) {
 {
   ok("format one decimal under 100", formatHeight(12.34) === "12.3");
   ok("format no decimal at/over 100", formatHeight(120.7) === "121");
+}
+
+// ---- block dimension labels (world px -> metres, same scale as the HUD height) ----
+{
+  // conversion uses the shared PIXELS_PER_METER (36 world units == 1m)
+  ok("world->m: one metre", approx(worldToMeters(PIXELS_PER_METER), 1));
+  ok("world->m: two metres", approx(worldToMeters(PIXELS_PER_METER * 2), 2));
+  ok("world->m: fraction", approx(worldToMeters(PIXELS_PER_METER / 2), 0.5));
+  ok("world->m respects custom scale", approx(worldToMeters(20, 10), 2));
+
+  // read-friendly one-decimal metres
+  ok("formatDim one decimal", formatDim(1) === "1.0" && formatDim(2.399) === "2.4");
+  ok("formatDim rounds", formatDim(0.833) === "0.8");
+  ok("formatDim clamps negatives to 0.0", formatDim(-3) === "0.0");
+
+  // rectangular blocks -> `가로 × 세로` bounding box in metres
+  ok(
+    "wide block reads as width × height",
+    dimLabel({ kind: "wide", w: PIXELS_PER_METER * 2.4, h: PIXELS_PER_METER }) === "2.4 × 1.0",
+  );
+  ok(
+    "square block reads equal sides",
+    dimLabel({ kind: "square", w: PIXELS_PER_METER * 1.5, h: PIXELS_PER_METER * 1.5 }) ===
+      "1.5 × 1.5",
+  );
+
+  // circle -> diameter form
+  ok(
+    "circle reads as diameter",
+    dimLabel({ kind: "circle", w: PIXELS_PER_METER * 1.2, h: PIXELS_PER_METER * 1.2, radius: PIXELS_PER_METER * 0.6 }) ===
+      "⌀1.2",
+  );
+  ok(
+    "circle diameter falls back to width when radius absent",
+    dimLabel({ kind: "circle", w: PIXELS_PER_METER * 1.0, h: PIXELS_PER_METER * 1.0 }) === "⌀1.0",
+  );
+
+  // the label is derived straight from a generated spec's bounding box, so it
+  // always agrees with the block the physics engine builds.
+  const drng = mulberry32(555);
+  let labelValid = true;
+  for (let i = 0; i < 200; i++) {
+    const spec = makeBlockSpec(i, i % 130, drng);
+    const label = dimLabel(spec);
+    if (spec.kind === "circle") {
+      const expected = `⌀${(worldToMeters(spec.w) + 1e-9).toFixed(1)}`;
+      if (label !== expected) labelValid = false;
+    } else {
+      const expected = `${(worldToMeters(spec.w) + 1e-9).toFixed(1)} × ${(worldToMeters(spec.h) + 1e-9).toFixed(1)}`;
+      if (label !== expected) labelValid = false;
+    }
+    // every block reports a positive, finite size
+    if (!/\d/.test(label)) labelValid = false;
+  }
+  ok("dimLabel matches every generated spec's bbox", labelValid);
 }
 
 // ---- sky sampling ----

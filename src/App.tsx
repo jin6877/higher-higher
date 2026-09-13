@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { Game } from "./game/engine";
 import * as SFX from "./game/audio";
 import { formatHeight } from "./game/logic";
+import { dimLabel } from "./game/dimensions";
 import type { HudState, ShapeKind } from "./game/types";
 
 export default function App() {
@@ -124,6 +125,11 @@ export default function App() {
                     <div className="h-6 w-6 rounded-md bg-white/10" />
                   )}
                 </div>
+                {hud.next && (
+                  <div className="mt-0.5 text-[10px] font-bold leading-none tabular-nums text-white/75">
+                    {dimLabel(hud.next)}
+                  </div>
+                )}
               </div>
 
               <div className="rounded-2xl bg-black/30 px-4 py-2 text-right backdrop-blur-md">
