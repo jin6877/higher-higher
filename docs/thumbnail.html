@@ -1,0 +1,285 @@
+<!doctype html>
+<html lang="ko">
+  <head>
+    <meta charset="UTF-8" />
+    <style>
+      * { margin: 0; padding: 0; box-sizing: border-box; }
+      html, body { margin: 0; }
+      :root {
+        --pink: #ff6b9d;
+        --gold: #ffd166;
+        --mint: #06d6a0;
+        --cyan: #4cc9f0;
+        --violet: #c77dff;
+        --tang: #ff9e64;
+        --rose: #ff5d8f;
+        --lime: #8ae234;
+      }
+      .poster {
+        width: 1200px;
+        height: 630px;
+        overflow: hidden;
+        position: relative;
+        font-family: -apple-system, BlinkMacSystemFont, "Pretendard",
+          "Malgun Gothic", "Apple SD Gothic Neo", "Segoe UI", sans-serif;
+        background: linear-gradient(
+          158deg,
+          #04051a 0%,
+          #0a1330 26%,
+          #16336e 52%,
+          #2f66a8 74%,
+          #f2a877 100%
+        );
+        color: #fff;
+      }
+
+      /* stars */
+      .stars { position: absolute; inset: 0; }
+      .star {
+        position: absolute;
+        background: #fff;
+        border-radius: 50%;
+        opacity: 0.85;
+      }
+
+      /* soft aurora glow */
+      .glow {
+        position: absolute;
+        border-radius: 50%;
+        filter: blur(60px);
+      }
+      .glow.a { width: 520px; height: 520px; left: -120px; top: -160px;
+        background: radial-gradient(circle, rgba(255,107,157,0.35), transparent 70%); }
+      .glow.b { width: 640px; height: 640px; right: -160px; bottom: -260px;
+        background: radial-gradient(circle, rgba(255,209,102,0.28), transparent 70%); }
+
+      /* horizon sun */
+      .sun {
+        position: absolute; left: 50%; bottom: -220px; width: 900px; height: 420px;
+        transform: translateX(-50%);
+        background: radial-gradient(ellipse at center, rgba(255,226,176,0.55), transparent 62%);
+        filter: blur(6px);
+      }
+
+      /* ---- left copy ---- */
+      .copy {
+        position: absolute;
+        left: 74px;
+        top: 0;
+        height: 100%;
+        width: 640px;
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+        gap: 4px;
+        z-index: 5;
+      }
+      .pill-top {
+        display: inline-flex;
+        align-items: center;
+        gap: 9px;
+        width: fit-content;
+        padding: 9px 18px;
+        border-radius: 999px;
+        background: rgba(255, 255, 255, 0.12);
+        backdrop-filter: blur(6px);
+        font-size: 19px;
+        font-weight: 700;
+        letter-spacing: 0.01em;
+        color: rgba(255, 255, 255, 0.9);
+        margin-bottom: 22px;
+      }
+      .dot { width: 11px; height: 11px; border-radius: 50%; background: var(--mint);
+        box-shadow: 0 0 12px var(--mint); }
+      h1 {
+        font-size: 138px;
+        font-weight: 900;
+        line-height: 0.9;
+        letter-spacing: -0.02em;
+        background: linear-gradient(120deg, #fff 8%, #ffe7b0 45%, #ff9ec4 90%);
+        -webkit-background-clip: text;
+        background-clip: text;
+        color: transparent;
+        filter: drop-shadow(0 8px 30px rgba(255, 107, 157, 0.35));
+      }
+      .sub {
+        font-size: 30px;
+        font-weight: 800;
+        letter-spacing: 0.34em;
+        color: rgba(255, 255, 255, 0.52);
+        margin-top: 14px;
+      }
+      .tag {
+        font-size: 31px;
+        font-weight: 600;
+        color: rgba(255, 255, 255, 0.9);
+        margin-top: 26px;
+        line-height: 1.35;
+      }
+      .tag b {
+        background: linear-gradient(90deg, var(--gold), var(--pink));
+        -webkit-background-clip: text;
+        background-clip: text;
+        color: transparent;
+      }
+      .pills { display: flex; gap: 12px; margin-top: 30px; }
+      .pill {
+        padding: 11px 18px;
+        border-radius: 14px;
+        background: rgba(255, 255, 255, 0.1);
+        border: 1px solid rgba(255, 255, 255, 0.14);
+        font-size: 19px;
+        font-weight: 700;
+        color: rgba(255, 255, 255, 0.92);
+        display: flex;
+        align-items: center;
+        gap: 8px;
+      }
+
+      /* ---- right key visual: candy tower ---- */
+      .stage {
+        position: absolute;
+        right: 40px;
+        bottom: 0;
+        width: 470px;
+        height: 630px;
+        z-index: 4;
+      }
+      .tower {
+        position: absolute;
+        left: 50%;
+        bottom: 6px;
+        transform: translateX(-50%) rotate(-3deg);
+        transform-origin: bottom center;
+        display: flex;
+        flex-direction: column-reverse;
+        align-items: center;
+        gap: 5px;
+        filter: drop-shadow(0 26px 34px rgba(0, 0, 0, 0.45));
+      }
+      .blk {
+        height: 62px;
+        border-radius: 11px;
+        position: relative;
+        box-shadow: inset 0 3px 0 rgba(255, 255, 255, 0.4),
+          inset 0 -6px 10px rgba(0, 0, 0, 0.16);
+      }
+      .blk::after {
+        content: "";
+        position: absolute;
+        inset: 6px 10px auto 10px;
+        height: 8px;
+        border-radius: 6px;
+        background: rgba(255, 255, 255, 0.28);
+      }
+      .pedestal {
+        width: 300px;
+        height: 46px;
+        border-radius: 14px;
+        background: linear-gradient(180deg, #3a4780, #1b2350);
+        border-top: 3px solid rgba(143, 230, 255, 0.9);
+        box-shadow: 0 0 22px rgba(143, 230, 255, 0.35),
+          0 24px 30px rgba(0, 0, 0, 0.4);
+      }
+      .next {
+        position: absolute;
+        left: 50%;
+        top: 40px;
+        transform: translateX(-50%) rotate(6deg);
+        width: 120px;
+        height: 60px;
+        border-radius: 11px;
+        border: 3px dashed var(--lime);
+        background: rgba(138, 226, 52, 0.18);
+      }
+      .next .guide {
+        position: absolute;
+        left: 50%;
+        top: 100%;
+        width: 0;
+        height: 78px;
+        border-left: 3px dashed rgba(138, 226, 52, 0.6);
+      }
+
+      .credit {
+        position: absolute;
+        left: 74px;
+        bottom: 34px;
+        font-size: 17px;
+        font-weight: 600;
+        letter-spacing: 0.02em;
+        color: rgba(255, 255, 255, 0.42);
+        z-index: 5;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="poster">
+      <div class="glow a"></div>
+      <div class="glow b"></div>
+      <div class="sun"></div>
+      <div class="stars" id="stars"></div>
+
+      <div class="copy">
+        <div class="pill-top"><span class="dot"></span> 물리 기반 블록 쌓기 게임</div>
+        <h1>높이 높이</h1>
+        <div class="sub">HIGHER&nbsp;&nbsp;HIGHER</div>
+        <div class="tag">무너지기 전까지, <b>더 높이</b>.<br />랜덤 블록을 쌓아 최고 높이에 도전.</div>
+        <div class="pills">
+          <div class="pill">🎯 조준 드롭</div>
+          <div class="pill">🧱 랜덤 100블록</div>
+          <div class="pill">🌌 우주까지</div>
+        </div>
+      </div>
+
+      <div class="stage">
+        <div class="next">
+          <div class="guide"></div>
+        </div>
+        <div class="tower" id="tower"></div>
+      </div>
+
+      <div class="credit">React · TypeScript · matter.js · 100% 클라이언트</div>
+    </div>
+
+    <script>
+      // candy tower blocks (bottom -> top)
+      const blocks = [
+        { w: 210, c1: "#22d39a", c2: "#06d6a0" },
+        { w: 158, c1: "#ff86b3", c2: "#ff5d8f" },
+        { w: 186, c1: "#67d4f5", c2: "#4cc9f0" },
+        { w: 128, c1: "#ffb27f", c2: "#ff9e64" },
+        { w: 172, c1: "#ff8ab0", c2: "#ff6b9d" },
+        { w: 118, c1: "#ffdd85", c2: "#ffd166" },
+        { w: 150, c1: "#d59bff", c2: "#c77dff" },
+        { w: 96, c1: "#a6ef56", c2: "#8ae234" },
+      ];
+      const tower = document.getElementById("tower");
+      // pedestal first (column-reverse => appears at bottom)
+      const ped = document.createElement("div");
+      ped.className = "pedestal";
+      tower.appendChild(ped);
+      blocks.forEach((b) => {
+        const el = document.createElement("div");
+        el.className = "blk";
+        el.style.width = b.w + "px";
+        el.style.background = `linear-gradient(180deg, ${b.c1}, ${b.c2})`;
+        tower.appendChild(el);
+      });
+
+      // scatter stars in the upper region
+      const stars = document.getElementById("stars");
+      for (let i = 0; i < 70; i++) {
+        const s = document.createElement("div");
+        s.className = "star";
+        const size = Math.random() * 2.4 + 0.8;
+        s.style.width = size + "px";
+        s.style.height = size + "px";
+        s.style.left = Math.random() * 1200 + "px";
+        s.style.top = Math.random() * 340 + "px";
+        s.style.opacity = (0.3 + Math.random() * 0.6).toFixed(2);
+        stars.appendChild(s);
+      }
+    </script>
+  </body>
+</html>

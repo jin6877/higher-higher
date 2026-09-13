@@ -1,0 +1,71 @@
+@import "tailwindcss";
+
+:root {
+  color-scheme: dark;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+  margin: 0;
+}
+
+body {
+  font-family: -apple-system, BlinkMacSystemFont, "Pretendard", "Malgun Gothic",
+    "Apple SD Gothic Neo", "Segoe UI", sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  overflow: hidden;
+  overscroll-behavior: none;
+  touch-action: none;
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* Prevent iOS text-size adjust weirdness */
+* {
+  -webkit-text-size-adjust: 100%;
+}
+
+@keyframes floaty {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-8px);
+  }
+}
+
+@keyframes shimmer {
+  0% {
+    background-position: -200% 0;
+  }
+  100% {
+    background-position: 200% 0;
+  }
+}
+
+@keyframes pop-in {
+  0% {
+    opacity: 0;
+    transform: scale(0.85) translateY(12px);
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+  }
+}
+
+@keyframes rise {
+  0% {
+    opacity: 0;
+    transform: translateY(24px);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
