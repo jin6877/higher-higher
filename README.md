@@ -13,7 +13,7 @@
 
 ## 🔗 라이브 데모
 
-**https://higher-higher.vercel.app** &nbsp;→ 배포 후 실제 프로덕션 URL로 갱신됩니다.
+### ▶️ **https://higher-higher-lac.vercel.app**
 
 ## 🎮 게임 소개
 
