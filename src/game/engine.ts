@@ -14,6 +14,7 @@ import {
   SETTLE_FRAMES,
   SETTLE_MAX_WAIT_MS,
   SETTLE_SPEED,
+  SWING_CENTER_X,
   SWING_RANGE,
   TOTAL_BLOCKS,
 } from "./constants";
@@ -320,7 +321,10 @@ export class Game {
   private updateSwing() {
     if (this.phase !== "playing" || !this.awaiting || !this.pending) return;
     const period = swingPeriodMs(this.placedCount);
-    const center = this.topBlockCenterX(); // crane hovers above the tower top
+    // Sweep is anchored to the FIXED field centre (pedestal centre), never the
+    // tower top — so a leaning stack can't drag the sweep to its side. The block
+    // covers the whole play field and can be dropped anywhere across the base.
+    const center = SWING_CENTER_X;
     const offset = swingOffset(this.time - this.swingStart, SWING_RANGE, period);
     this.setAim(center + offset);
   }

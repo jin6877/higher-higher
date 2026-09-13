@@ -28,8 +28,14 @@ export const AIM_RANGE = 150;
  * Auto-swing (crane) parameters. The next block sweeps left↔right on its own;
  * a tap/click/space drops it at the current x. Slow & forgiving early, and only
  * moderately quicker (still fairly relaxed) as the tower grows.
+ *
+ * The sweep is anchored to the FIXED field centre (the pedestal centre, world
+ * x = 0) — NOT the current tower top. This way a leaning tower never drags the
+ * sweep with it: you can always aim across the whole play field and drop on the
+ * far side / anywhere on the base, no matter which way the stack is tilting.
  */
-export const SWING_RANGE = 82; // half-width of the sweep — tighter so centre is easier to hit
+export const SWING_CENTER_X = 0; // fixed sweep centre = pedestal / play-field centre (world x)
+export const SWING_RANGE = AIM_RANGE; // half-width of the sweep — spans the WHOLE field, edge to edge
 export const SWING_PERIOD_BASE = 3800; // ms for a full there-and-back at the start (slower)
 export const SWING_PERIOD_MIN = 2000; // fastest full cycle high up (still readable)
 export const SWING_RAMP_BLOCKS = 80; // blocks over which speed ramps to max (gentler)

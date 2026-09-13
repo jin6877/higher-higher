@@ -25,6 +25,7 @@ import {
   PIXELS_PER_METER,
   PLATFORM_TOP_Y,
   PLATFORM_WIDTH,
+  SWING_CENTER_X,
   SWING_PERIOD_BASE,
   SWING_PERIOD_MIN,
   SWING_RANGE,
@@ -135,8 +136,23 @@ function approx(a: number, b: number, eps = 1e-6) {
   ok("platform widened for an easier start", PLATFORM_WIDTH >= 200);
   ok("aim range covers the wider platform", AIM_RANGE >= PLATFORM_WIDTH / 2);
 
-  // the sweep is tighter than the platform half-width so it stays over the base
-  ok("swing amplitude fits within the base", SWING_RANGE < PLATFORM_WIDTH / 2);
+  // the sweep is anchored to the FIXED field centre (pedestal centre = world x 0),
+  // NOT the current tower top — so a leaning stack can't drag the sweep sideways.
+  ok("swing is centred on the fixed field centre", SWING_CENTER_X === 0);
+
+  // the sweep now spans the WHOLE play field (edge to edge), covering the entire
+  // base and beyond, so you can aim anywhere — even the far side of a leaning tower.
+  ok("swing amplitude spans the whole base", SWING_RANGE >= PLATFORM_WIDTH / 2);
+  ok("swing amplitude covers the full field", SWING_RANGE >= AIM_RANGE);
+  ok("swing stays within the hard aim clamp", SWING_RANGE <= AIM_RANGE);
+
+  // with the fixed centre + full range, the sweep reaches both play-field edges
+  // symmetrically about the centre (never biased toward one side).
+  ok(
+    "sweep reaches the field's left & right edges symmetrically",
+    approx(SWING_CENTER_X - SWING_RANGE, -AIM_RANGE) &&
+      approx(SWING_CENTER_X + SWING_RANGE, AIM_RANGE),
+  );
 
   // swing is slow to begin and only moderately faster at the top
   ok("default swing starts slow", swingPeriodMs(0) === SWING_PERIOD_BASE);
