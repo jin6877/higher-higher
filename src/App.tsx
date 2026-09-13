@@ -243,12 +243,12 @@ export default function App() {
             </p>
 
             <div className="mt-5 flex gap-3">
-              <Stat label="높이" value={`${formatHeight(hud.heightM)}m`} />
-              <Stat label="블록" value={`${hud.placed}/${hud.total}`} />
+              <Stat label="도달 높이" value={`${formatHeight(hud.peakM)}m`} />
+              <Stat label="블록" value={`${hud.peakBlocks}/${hud.total}`} />
             </div>
             <div className="mt-3 rounded-2xl bg-white/5 py-2 text-sm font-semibold text-white/70">
               🏆 최고 {formatHeight(hud.bestM)}m · {hud.bestBlocks}블록
-              {hud.heightM >= hud.bestM - 0.05 && hud.heightM > 0 && (
+              {hud.peakM >= hud.bestM - 0.05 && hud.peakM > 0 && (
                 <span className="ml-2 rounded-full bg-[#FFD166] px-2 py-0.5 text-[11px] font-bold text-[#3a2a00]">
                   신기록!
                 </span>

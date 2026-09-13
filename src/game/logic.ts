@@ -72,6 +72,16 @@ export function isNewRecord(candidateM: number, bestM: number): boolean {
   return candidateM > bestM + 1e-6;
 }
 
+/**
+ * Running peak of a series of instantaneous heights. The tower's height rises as
+ * blocks settle but can *drop* the instant it topples (blocks tumble away). We
+ * keep the highest value ever seen so the run is scored by the peak it reached,
+ * not by whatever is left standing after a collapse.
+ */
+export function trackPeak(peak: number, current: number): number {
+  return current > peak ? current : peak;
+}
+
 export function formatHeight(m: number): string {
   if (m >= 100) return m.toFixed(0);
   return m.toFixed(1);

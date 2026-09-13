@@ -31,6 +31,7 @@ import {
   isCleared,
   loadRecord,
   saveRecord,
+  trackPeak,
   type Record as HRecord,
 } from "./logic";
 import { mulberry32, randRange, type Rng } from "./rng";
@@ -100,6 +101,8 @@ export class Game {
   private dropAt = 0;
 
   private placedCount = 0;
+  private peakHeightM = 0; // highest tower height reached this run (survives collapse)
+  private peakBlocks = 0; // most blocks standing this run (survives collapse)
   private idCounter = 1;
   private lastColor: string | undefined;
   private rng: Rng;
@@ -259,6 +262,8 @@ export class Game {
     SFX.primeAudio();
     this.clearBlocks();
     this.placedCount = 0;
+    this.peakHeightM = 0;
+    this.peakBlocks = 0;
     this.cleared = false;
     this.wobble = 0;
     this.lastColor = undefined;
@@ -352,6 +357,7 @@ export class Game {
     const b = this.active;
     this.active = null;
     this.placedCount++;
+    this.updatePeak(); // lock in this height before a possible clear/collapse
     SFX.sfxPlace();
     this.burst(b.body.position.x, b.body.bounds.min.y, b.spec.color, 10, false);
     if (isCleared(this.placedCount, TOTAL_BLOCKS)) {
@@ -365,8 +371,9 @@ export class Game {
   private clearGame() {
     this.phase = "clear";
     this.cleared = true;
-    const h = this.currentHeightM();
-    this.record = saveRecord(h, this.placedCount);
+    this.updatePeak();
+    // finalize on the PEAK reached, never a value that dipped during the run
+    this.record = saveRecord(this.peakHeightM, this.peakBlocks);
     SFX.sfxClear();
     this.confetti();
     this.emit(true);
@@ -377,11 +384,18 @@ export class Game {
     this.phase = "gameover";
     this.active = null;
     this.awaiting = false;
-    const h = this.currentHeightM();
-    this.record = saveRecord(h, this.placedCount);
+    // score the run by the peak height it reached BEFORE toppling — the tower
+    // is already tumbling (blocks falling away), so the live height is lower now.
+    this.record = saveRecord(this.peakHeightM, this.peakBlocks);
     this.cam.shakeMag = 14;
     SFX.sfxCollapse();
     this.emit(true);
+  }
+
+  /** Fold the current tower height/blocks into the run's peak (monotonic). */
+  private updatePeak() {
+    this.peakHeightM = trackPeak(this.peakHeightM, this.currentHeightM());
+    if (this.placedCount > this.peakBlocks) this.peakBlocks = this.placedCount;
   }
 
   // ---------- physics step ----------
@@ -408,6 +422,7 @@ export class Game {
         }
       }
       this.updateWobble();
+      this.updatePeak(); // keep the peak fresh even between placements
     }
   }
 
@@ -629,6 +644,97 @@ export class Game {
     if (this.awaiting && this.pending && this.phase === "playing") this.drawPreview();
     this.drawParticles();
     this.drawWobbleVignette();
+    this.drawMinimap();
+  }
+
+  /**
+   * Right-side vertical overview: the whole tower (base → current top) scaled to
+   * fit, so it stays visible even when the main camera has climbed past it. Each
+   * block is drawn in its real colour (simplified to its footprint), and a box
+   * marks the slice the main camera is currently showing. Compact/hidden on
+   * narrow screens so it never covers the play field, HUD or buttons.
+   */
+  private drawMinimap() {
+    if (this.phase === "home") return;
+    if (this.W < 460) return; // too narrow (mobile) — hide entirely
+    const ctx = this.ctx;
+    const compact = this.W < 760;
+    const panelW = compact ? 40 : 58;
+    const margin = 12;
+    const px = this.W - panelW - margin;
+    const pTop = 118; // clears the top HUD (height / next / blocks)
+    const pBottom = this.H - (this.phase === "playing" ? 118 : 32); // clears bottom controls
+    const pH = pBottom - pTop;
+    if (pH < 150) return; // not enough vertical room -> skip
+
+    // vertical world range: base of the pedestal up to the highest block (+headroom)
+    const baseY = PLATFORM_TOP_Y + PLATFORM_HEIGHT;
+    let topWorld = PLATFORM_TOP_Y;
+    for (const b of this.blocks) topWorld = Math.min(topWorld, b.body.bounds.min.y);
+    if (this.active) topWorld = Math.min(topWorld, this.active.body.bounds.min.y);
+    topWorld -= 46; // headroom above the tip
+    const worldSpan = Math.max(baseY - topWorld, 260);
+
+    // fixed horizontal range so the tower doesn't slide sideways as it grows
+    const halfX = AIM_RANGE + 34;
+
+    const padX = 6;
+    const padY = 8;
+    const innerW = panelW - padX * 2;
+    const innerH = pH - padY * 2;
+    const mx = (wx: number) => px + padX + ((wx + halfX) / (halfX * 2)) * innerW;
+    const my = (wy: number) => pTop + padY + ((wy - topWorld) / worldSpan) * innerH;
+
+    ctx.save();
+    // panel background
+    roundRect(ctx, px, pTop, panelW, pH, 12);
+    ctx.fillStyle = "rgba(9,13,32,0.42)";
+    ctx.fill();
+    ctx.strokeStyle = "rgba(255,255,255,0.16)";
+    ctx.lineWidth = 1;
+    ctx.stroke();
+    // keep every mark inside the rounded panel
+    roundRect(ctx, px, pTop, panelW, pH, 12);
+    ctx.clip();
+
+    // camera viewport slice (what the main view is currently showing)
+    const viewTop = my(this.cam.y - this.H / 2 / this.cam.zoom);
+    const viewBot = my(this.cam.y + this.H / 2 / this.cam.zoom);
+    ctx.fillStyle = "rgba(255,255,255,0.08)";
+    ctx.fillRect(px, viewTop, panelW, viewBot - viewTop);
+    ctx.strokeStyle = "rgba(255,255,255,0.5)";
+    ctx.lineWidth = 1.2;
+    ctx.strokeRect(px + 2, viewTop, panelW - 4, viewBot - viewTop);
+
+    // pedestal at the base
+    const pl = mx(-PLATFORM_WIDTH / 2);
+    const pr = mx(PLATFORM_WIDTH / 2);
+    const pby = my(PLATFORM_TOP_Y);
+    ctx.fillStyle = "rgba(120,150,220,0.55)";
+    ctx.fillRect(pl, pby, pr - pl, Math.max(2, my(baseY) - pby));
+
+    // blocks (real colour, simplified to footprint)
+    for (const b of this.blocks) {
+      const l = mx(b.body.bounds.min.x);
+      const r = mx(b.body.bounds.max.x);
+      const t = my(b.body.bounds.min.y);
+      const btm = my(b.body.bounds.max.y);
+      ctx.fillStyle = b.spec.color;
+      ctx.fillRect(l, t, Math.max(1.6, r - l), Math.max(1.6, btm - t));
+    }
+    // the in-flight block, dimmer
+    if (this.active) {
+      const b = this.active;
+      const l = mx(b.body.bounds.min.x);
+      const r = mx(b.body.bounds.max.x);
+      const t = my(b.body.bounds.min.y);
+      const btm = my(b.body.bounds.max.y);
+      ctx.globalAlpha = 0.7;
+      ctx.fillStyle = b.spec.color;
+      ctx.fillRect(l, t, Math.max(1.6, r - l), Math.max(1.6, btm - t));
+      ctx.globalAlpha = 1;
+    }
+    ctx.restore();
   }
 
   private drawStars(amount: number) {
@@ -941,6 +1047,8 @@ export class Game {
       placed: this.placedCount,
       total: TOTAL_BLOCKS,
       heightM: this.currentHeightM(),
+      peakM: Math.max(this.peakHeightM, this.currentHeightM()),
+      peakBlocks: Math.max(this.peakBlocks, this.placedCount),
       bestM: this.record.heightM,
       bestBlocks: this.record.blocks,
       awaitingDrop: this.awaiting,
@@ -1028,7 +1136,8 @@ export class Game {
     cv.width = W;
     cv.height = H;
     const ctx = cv.getContext("2d")!;
-    const alt = this.currentHeightM();
+    // report the peak reached this run, not the (possibly collapsed) live height
+    const alt = Math.max(this.peakHeightM, this.currentHeightM());
     const sky = sampleSky(alt);
 
     const g = ctx.createLinearGradient(0, 0, 0, H);
@@ -1127,7 +1236,7 @@ export class Game {
 
     ctx.fillStyle = "rgba(255,255,255,0.8)";
     ctx.font = "600 44px -apple-system, sans-serif";
-    ctx.fillText(`블록 ${this.placedCount} / ${TOTAL_BLOCKS}`, W / 2, 380);
+    ctx.fillText(`블록 ${Math.max(this.peakBlocks, this.placedCount)} / ${TOTAL_BLOCKS}`, W / 2, 380);
 
     ctx.fillStyle = "rgba(255,255,255,0.55)";
     ctx.font = "700 40px -apple-system, sans-serif";
@@ -1150,6 +1259,10 @@ export class Game {
         placed: this.placedCount,
         awaitingDrop: this.awaiting,
         heightM: this.currentHeightM(),
+        peakM: Math.max(this.peakHeightM, this.currentHeightM()),
+        peakBlocks: Math.max(this.peakBlocks, this.placedCount),
+        bestM: this.record.heightM,
+        bestBlocks: this.record.blocks,
         settledTopY: this.settledTopY(),
         topX: this.topBlockCenterX(),
         topY: this.topBlockTopY(),

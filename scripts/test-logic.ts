@@ -13,8 +13,10 @@ import {
   heightMeters,
   isCleared,
   isNewRecord,
+  saveRecord,
   towerHeightMeters,
   towerTopY,
+  trackPeak,
   type BlockLite,
 } from "../src/game/logic";
 import {
@@ -216,6 +218,26 @@ function approx(a: number, b: number, eps = 1e-6) {
   ok("remaining clamps", blocksRemaining(120) === 0);
   ok("new record when higher", isNewRecord(12.5, 10));
   ok("not new record when lower", !isNewRecord(8, 10));
+}
+
+// ---- peak-height tracking (record is the peak reached, not the post-collapse height) ----
+{
+  ok("peak keeps the larger value", trackPeak(4, 7) === 7 && trackPeak(9, 3) === 9);
+  ok("peak ignores a drop", trackPeak(12.5, 12.5 - 4) === 12.5);
+
+  // simulate a run whose height climbs, then collapses: 0 → up to 8.4 → tumbles to 1.2
+  const series = [0, 1.5, 3.2, 5.0, 6.7, 8.4, 5.1, 2.0, 1.2];
+  let peak = 0;
+  for (const h of series) peak = trackPeak(peak, h);
+  ok("peak is the max reached during the run", approx(peak, 8.4));
+  ok("peak is not the final (post-collapse) height", peak > series[series.length - 1]);
+
+  // the finalized record uses the peak, so a collapse can't shrink the score
+  const finalHeight = series[series.length - 1]; // 1.2 after tumbling
+  const rec = saveRecord(peak, 12); // in Node there's no localStorage -> starts from {0,0}
+  ok("saved record equals the peak, not the collapsed height", approx(rec.heightM, 8.4));
+  ok("saving the collapsed height would have been worse", finalHeight < rec.heightM);
+  ok("peak-blocks preserved in record", rec.blocks === 12);
 }
 
 // ---- formatting ----

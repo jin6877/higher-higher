@@ -49,6 +49,8 @@ export interface HudState {
   placed: number; // number of blocks successfully placed (settled)
   total: number; // max blocks (100)
   heightM: number; // current tower height in meters
+  peakM: number; // highest height reached this run (survives a collapse)
+  peakBlocks: number; // most blocks standing this run (survives a collapse)
   bestM: number; // best height record (meters)
   bestBlocks: number;
   awaitingDrop: boolean; // a new block is ready to be aimed & dropped
