@@ -17,7 +17,17 @@ import {
   towerTopY,
   type BlockLite,
 } from "../src/game/logic";
-import { PIXELS_PER_METER, PLATFORM_TOP_Y, TOTAL_BLOCKS } from "../src/game/constants";
+import {
+  AIM_RANGE,
+  FALL_LIMIT,
+  PIXELS_PER_METER,
+  PLATFORM_TOP_Y,
+  PLATFORM_WIDTH,
+  SWING_PERIOD_BASE,
+  SWING_PERIOD_MIN,
+  SWING_RANGE,
+  TOTAL_BLOCKS,
+} from "../src/game/constants";
 
 let passed = 0;
 let failed = 0;
@@ -49,13 +59,28 @@ function approx(a: number, b: number, eps = 1e-6) {
   ok("rng in [0,1)", inRange);
 }
 
-// ---- shape pool difficulty ramp ----
+// ---- shape pool difficulty ramp (rolly shapes pushed later & kept rare) ----
 {
   const early = shapePoolFor(0);
   ok("early pool has no rolly shapes", !early.includes("circle"));
-  const late = shapePoolFor(30);
+  const late = shapePoolFor(60);
   ok("late pool includes circle", late.includes("circle"));
   ok("late pool richer than early", late.length > early.length);
+
+  // round shapes (circle/semicircle) only appear from the mid-tower on
+  const roundBefore = (i: number) =>
+    shapePoolFor(i).some((k) => k === "circle" || k === "semicircle");
+  ok("no round shapes before block 45", !roundBefore(20) && !roundBefore(44));
+  ok("round shapes present from block 45", roundBefore(45));
+
+  // the mildly-rolly polygon is delayed too (introduced around block 28)
+  ok("no poly in the early flat stretch", !shapePoolFor(13).includes("poly"));
+  ok("poly appears by mid-tower", shapePoolFor(45).includes("poly"));
+
+  // rolly shapes stay the exception: flats out-weight round in the full pool
+  const full = shapePoolFor(60);
+  const round = full.filter((k) => k === "circle" || k === "semicircle").length;
+  ok("round shapes are a minority of the full pool", round * 3 <= full.length);
 }
 
 // ---- triangle fully removed from the shape system ----
@@ -100,6 +125,29 @@ function approx(a: number, b: number, eps = 1e-6) {
     "period decreases as tower grows",
     swingPeriodMs(30, 3000, 1400, 60) < swingPeriodMs(5, 3000, 1400, 60),
   );
+}
+
+// ---- eased difficulty defaults (wider base + slower, gentler swing) ----
+{
+  // the base platform is meaningfully wider than the original 148 units
+  ok("platform widened for an easier start", PLATFORM_WIDTH >= 200);
+  ok("aim range covers the wider platform", AIM_RANGE >= PLATFORM_WIDTH / 2);
+
+  // the sweep is tighter than the platform half-width so it stays over the base
+  ok("swing amplitude fits within the base", SWING_RANGE < PLATFORM_WIDTH / 2);
+
+  // swing is slow to begin and only moderately faster at the top
+  ok("default swing starts slow", swingPeriodMs(0) === SWING_PERIOD_BASE);
+  ok("default swing is slower than the legacy 3000ms start", SWING_PERIOD_BASE >= 3600);
+  ok("even the fastest swing stays readable", SWING_PERIOD_MIN >= 1800);
+  ok("swing eases from base down to min", SWING_PERIOD_BASE > SWING_PERIOD_MIN);
+  ok(
+    "default period eases toward min as tower grows",
+    swingPeriodMs(80) === SWING_PERIOD_MIN && swingPeriodMs(10) > SWING_PERIOD_MIN,
+  );
+
+  // collapse judging is a touch more forgiving than before (was 40)
+  ok("fall limit is a little more lenient", FALL_LIMIT >= 50);
 }
 
 // ---- block spec generation ----

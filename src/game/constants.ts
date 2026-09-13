@@ -7,31 +7,32 @@ export const TOTAL_BLOCKS = 100;
 /** world units per in-game meter (a typical block ~1m tall) */
 export const PIXELS_PER_METER = 36;
 
-/** platform (base) geometry */
+/** platform (base) geometry — a wide, forgiving base so early blocks nest easily */
 export const PLATFORM_TOP_Y = 0;
-export const PLATFORM_WIDTH = 148;
+export const PLATFORM_WIDTH = 208; // widened ~40% from 148 for an easier start
 export const PLATFORM_HEIGHT = 60;
 
 /**
  * How far below the platform top (in world units) a block's centre may drop
  * before it counts as "fallen off" -> collapse -> game over. A resting block
  * always sits at negative y (above the platform), so anything meaningfully
- * positive means it tumbled into the pit.
+ * positive means it tumbled into the pit. A touch lenient so a block that
+ * teeters and recovers isn't punished — but a clear tumble still collapses.
  */
-export const FALL_LIMIT = 40;
+export const FALL_LIMIT = 60;
 
 /** horizontal aim range from centre (world units) — hard clamp for the crane */
-export const AIM_RANGE = 128;
+export const AIM_RANGE = 150;
 
 /**
  * Auto-swing (crane) parameters. The next block sweeps left↔right on its own;
- * a tap/click/space drops it at the current x. Slow & forgiving early, quicker
- * (harder timing) as the tower grows.
+ * a tap/click/space drops it at the current x. Slow & forgiving early, and only
+ * moderately quicker (still fairly relaxed) as the tower grows.
  */
-export const SWING_RANGE = 104; // half-width of the sweep from its centre
-export const SWING_PERIOD_BASE = 3000; // ms for a full there-and-back at the start
-export const SWING_PERIOD_MIN = 1400; // fastest full cycle high up
-export const SWING_RAMP_BLOCKS = 60; // blocks over which speed ramps to max
+export const SWING_RANGE = 82; // half-width of the sweep — tighter so centre is easier to hit
+export const SWING_PERIOD_BASE = 3800; // ms for a full there-and-back at the start (slower)
+export const SWING_PERIOD_MIN = 2000; // fastest full cycle high up (still readable)
+export const SWING_RAMP_BLOCKS = 80; // blocks over which speed ramps to max (gentler)
 
 /** settle thresholds */
 export const SETTLE_SPEED = 0.4;

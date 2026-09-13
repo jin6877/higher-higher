@@ -91,14 +91,23 @@ function polyVerts(rng: Rng, rx: number, ry: number, n: number) {
 /** The pool of shape kinds available at a given block index (difficulty ramp). */
 export function shapePoolFor(index: number): ShapeKind[] {
   if (index < 1) return ["wide"]; // guaranteed wide, stable foundation
-  if (index < 3) return ["square", "wide", "wide", "rect"];
-  // first stretch: only flat-topped shapes so a well-aimed drop always nests
-  if (index < 10) return ["square", "wide", "rect", "trapezoid"];
-  if (index < 20)
+  if (index < 4) return ["square", "wide", "wide", "rect"];
+  // long early stretch: only flat-topped shapes so a well-aimed drop always nests
+  if (index < 14) return ["square", "wide", "rect", "trapezoid"];
+  // add concave (L / T) shapes but still nothing that rolls
+  if (index < 28)
+    return ["square", "rect", "wide", "trapezoid", "lshape", "tshape"];
+  // introduce the mildly-rolly polygon, kept rare (1 of 7)
+  if (index < 45)
     return ["square", "rect", "wide", "trapezoid", "lshape", "tshape", "poly"];
+  // full pool from ~half-way up — flats weighted heavier so round shapes
+  // (semicircle / circle) stay the exception, not the rule
   return [
     "square",
+    "square",
     "rect",
+    "rect",
+    "wide",
     "wide",
     "trapezoid",
     "lshape",
