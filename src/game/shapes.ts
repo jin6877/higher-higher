@@ -58,14 +58,6 @@ function partsCentroid(parts: CompoundPart[]): { x: number; y: number } {
   return { x: cx / A, y: cy / A };
 }
 
-function triangleVerts(base: number, h: number) {
-  return [
-    { x: -base / 2, y: h / 2 },
-    { x: base / 2, y: h / 2 },
-    { x: 0, y: -h / 2 },
-  ];
-}
-
 function trapezoidVerts(bottom: number, top: number, h: number) {
   return [
     { x: -bottom / 2, y: h / 2 },
@@ -103,7 +95,7 @@ export function shapePoolFor(index: number): ShapeKind[] {
   // first stretch: only flat-topped shapes so a well-aimed drop always nests
   if (index < 10) return ["square", "wide", "rect", "trapezoid"];
   if (index < 20)
-    return ["square", "rect", "wide", "trapezoid", "lshape", "tshape", "triangle", "poly"];
+    return ["square", "rect", "wide", "trapezoid", "lshape", "tshape", "poly"];
   return [
     "square",
     "rect",
@@ -111,7 +103,6 @@ export function shapePoolFor(index: number): ShapeKind[] {
     "trapezoid",
     "lshape",
     "tshape",
-    "triangle",
     "poly",
     "semicircle",
     "circle",
@@ -149,11 +140,6 @@ function resolve(kind: ShapeKind, rng: Rng): ResolvedShape {
       const top = randRange(rng, 30, 46);
       const h = randRange(rng, 34, 48);
       return fromVerts(kind, bottom, h, trapezoidVerts(bottom, top, h), false);
-    }
-    case "triangle": {
-      const base = randRange(rng, 48, 66);
-      const h = randRange(rng, 42, 58);
-      return fromVerts(kind, base, h, triangleVerts(base, h), false);
     }
     case "lshape": {
       const t = randRange(rng, 22, 28);

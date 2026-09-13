@@ -3,6 +3,7 @@
 
 import { mulberry32 } from "../src/game/rng";
 import { makeBlockSpec, shapePoolFor } from "../src/game/shapes";
+import { swingOffset, swingPeriodMs } from "../src/game/swing";
 import { sampleSky, altitude01 } from "../src/game/palette";
 import {
   blockHasFallen,
@@ -51,10 +52,54 @@ function approx(a: number, b: number, eps = 1e-6) {
 // ---- shape pool difficulty ramp ----
 {
   const early = shapePoolFor(0);
-  ok("early pool has no rolly shapes", !early.includes("circle") && !early.includes("triangle"));
+  ok("early pool has no rolly shapes", !early.includes("circle"));
   const late = shapePoolFor(30);
   ok("late pool includes circle", late.includes("circle"));
   ok("late pool richer than early", late.length > early.length);
+}
+
+// ---- triangle fully removed from the shape system ----
+{
+  let poolHasTriangle = false;
+  for (let idx = 0; idx <= 220; idx++) {
+    if ((shapePoolFor(idx) as string[]).includes("triangle")) poolHasTriangle = true;
+  }
+  ok("no shape pool ever contains triangle", !poolHasTriangle);
+
+  const rng = mulberry32(2024);
+  let generatedTriangle = false;
+  for (let i = 0; i < 3000; i++) {
+    const spec = makeBlockSpec(i, i % 130, rng);
+    if ((spec.kind as string) === "triangle") generatedTriangle = true;
+  }
+  ok("makeBlockSpec never generates a triangle", !generatedTriangle);
+}
+
+// ---- auto-swing (crane) math ----
+{
+  ok("swing starts centred", swingOffset(0, 100, 2000) === 0);
+  const quarter = swingOffset(500, 100, 2000); // t = period/4 -> +range
+  ok("swing reaches +range at quarter period", approx(quarter, 100, 1e-6));
+  const threeQuarter = swingOffset(1500, 100, 2000); // -range
+  ok("swing reaches -range at 3/4 period", approx(threeQuarter, -100, 1e-6));
+
+  let bounded = true;
+  for (let t = 0; t <= 6000; t += 37) {
+    const x = swingOffset(t, 104, 1800);
+    if (x < -104.0001 || x > 104.0001) bounded = false;
+  }
+  ok("swing stays within [-range, range]", bounded);
+
+  ok("swing degenerate period is safe", swingOffset(123, 100, 0) === 0);
+
+  // period ramps: slow at the start, fast (and floored) higher up
+  ok("period is base at start", swingPeriodMs(0, 3000, 1400, 60) === 3000);
+  ok("period is min once ramped", swingPeriodMs(60, 3000, 1400, 60) === 1400);
+  ok("period clamps beyond ramp", swingPeriodMs(999, 3000, 1400, 60) === 1400);
+  ok(
+    "period decreases as tower grows",
+    swingPeriodMs(30, 3000, 1400, 60) < swingPeriodMs(5, 3000, 1400, 60),
+  );
 }
 
 // ---- block spec generation ----
@@ -81,18 +126,6 @@ function approx(a: number, b: number, eps = 1e-6) {
   const s1 = makeBlockSpec(0, 20, r1);
   const s2 = makeBlockSpec(0, 20, r2);
   ok("spec deterministic by seed", s1.kind === s2.kind && approx(s1.w, s2.w));
-
-  // triangle centroid should sit below geometric centre (apex up => +y)
-  const triRng = mulberry32(3);
-  let triFound = false;
-  for (let i = 0; i < 200 && !triFound; i++) {
-    const sp = makeBlockSpec(i, 20, triRng);
-    if (sp.kind === "triangle") {
-      triFound = true;
-      ok("triangle centroid y positive (toward base)", sp.cy > 0);
-    }
-  }
-  ok("found a triangle in sequence", triFound);
 }
 
 // ---- fall / collapse detection ----

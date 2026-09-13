@@ -6,11 +6,16 @@ export type ShapeKind =
   | "wide"
   | "lshape"
   | "tshape"
-  | "triangle"
   | "trapezoid"
   | "circle"
   | "semicircle"
   | "poly"; // irregular convex-ish polygon
+
+/** Minimal shape info shown in the HUD "next block" preview. */
+export interface BlockPreview {
+  kind: ShapeKind;
+  color: string;
+}
 
 export interface BlockSpec {
   /** stable id */
@@ -50,4 +55,6 @@ export interface HudState {
   altitude01: number; // 0..1 normalized altitude for sky feedback
   wobble: number; // 0..1 instability warning level
   cleared: boolean;
+  /** the block that will drop next (after the current one) — HUD preview */
+  next: BlockPreview | null;
 }

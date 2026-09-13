@@ -14,8 +14,10 @@ import {
   SETTLE_FRAMES,
   SETTLE_MAX_WAIT_MS,
   SETTLE_SPEED,
+  SWING_RANGE,
   TOTAL_BLOCKS,
 } from "./constants";
+import { swingOffset, swingPeriodMs } from "./swing";
 import { darken, lighten, withAlpha } from "./color";
 import {
   altitude01 as altitudeNorm,
@@ -38,7 +40,7 @@ import type { BlockSpec, HudState, Phase } from "./types";
 
 const { Engine, Bodies, Body, Composite, Events } = Matter;
 
-const HOVER_GAP = 20; // air gap between preview bottom and tower top
+const HOVER_GAP = 12; // small air gap between drop point and tower top (soft landing)
 const FOCUS_FRAC = 0.34; // where the action sits vertically on screen
 const TARGET_VIEW = 560; // world units visible vertically (drives base zoom)
 
@@ -71,12 +73,13 @@ interface Star {
 }
 
 const bodyOpts: Matter.IChamferableBodyDefinition = {
-  friction: 0.72,
-  frictionStatic: 1.5,
-  restitution: 0,
+  friction: 0.95, // grippy contacts so aligned blocks don't slide/shimmy
+  frictionStatic: 2.4, // strong static grip once at rest
+  restitution: 0, // no bounce — blocks land with a dead "thunk", never spring
   density: 0.002,
   frictionAir: 0.02,
   slop: 0.02,
+  sleepThreshold: 24, // ~0.4s of calm -> body sleeps (kills residual micro-jitter)
 };
 
 export class Game {
@@ -89,7 +92,8 @@ export class Game {
   private platform!: Matter.Body;
 
   private blocks: Block[] = [];
-  private pending: BlockSpec | null = null;
+  private pending: BlockSpec | null = null; // current block being aimed (swinging)
+  private nextSpec: BlockSpec | null = null; // the one after — shown in the HUD preview
   private active: Block | null = null;
   private activeLanded = false;
   private calm = 0;
@@ -106,6 +110,7 @@ export class Game {
   private aimX = 0;
   private aimAngle = 0;
   private awaiting = false;
+  private swingStart = 0; // this.time when the current block began its sweep
 
   private cam = { y: -140, zoom: 1, shakeX: 0, shakeY: 0, shakeMag: 0, offsetX: 0 };
   private particles: Particle[] = [];
@@ -124,11 +129,6 @@ export class Game {
   private lastEmit = 0;
   private lastEmitKey = "";
 
-  // pointer state
-  private ptrActive = false;
-  private ptrMoved = false;
-  private ptrStartX = 0;
-  private ptrStartY = 0;
   private cleanups: (() => void)[] = [];
 
   constructor(canvas: HTMLCanvasElement, onState: (h: HudState) => void) {
@@ -142,12 +142,12 @@ export class Game {
     this.rng = mulberry32(seed);
 
     this.engine = Engine.create();
-    this.engine.enableSleeping = true;
+    this.engine.enableSleeping = true; // let settled stacks fall asleep -> zero drift
     this.engine.gravity.y = 1;
     this.engine.gravity.scale = 0.001;
-    this.engine.positionIterations = 16;
-    this.engine.velocityIterations = 12;
-    this.engine.constraintIterations = 4;
+    this.engine.positionIterations = 24; // stiffer stacks (less penetration wobble)
+    this.engine.velocityIterations = 18;
+    this.engine.constraintIterations = 6;
     this.world = this.engine.world;
 
     this.makePlatform();
@@ -249,6 +249,7 @@ export class Game {
     this.blocks = [];
     this.active = null;
     this.pending = null;
+    this.nextSpec = null;
     this.particles = [];
   }
 
@@ -264,7 +265,7 @@ export class Game {
     this.phase = "playing";
     this.aimX = 0;
     this.aimAngle = 0;
-    this.spawnPending();
+    this.initQueue();
     this.snapCamera();
     this.emit(true);
   }
@@ -279,13 +280,43 @@ export class Game {
     this.buildDemo();
   }
 
-  private spawnPending() {
-    const idx = this.placedCount;
-    this.pending = makeBlockSpec(this.idCounter++, idx, this.rng, this.lastColor);
-    this.lastColor = this.pending.color;
+  /** create a fresh spec for a given placement index, tracking colour variety */
+  private makeSpec(index: number): BlockSpec {
+    const spec = makeBlockSpec(this.idCounter++, index, this.rng, this.lastColor);
+    this.lastColor = spec.color;
+    return spec;
+  }
+
+  /** seed the current + next blocks at the start of a run */
+  private initQueue() {
+    this.pending = this.makeSpec(this.placedCount); // index 0 -> current
+    this.nextSpec = this.makeSpec(this.placedCount + 1); // index 1 -> preview
+    this.beginSwing();
+  }
+
+  /** promote the previewed block to current and roll a new preview */
+  private advanceQueue() {
+    // placedCount has already been incremented by confirmPlace
+    this.pending = this.nextSpec ?? this.makeSpec(this.placedCount);
+    this.nextSpec = this.makeSpec(this.placedCount + 1);
+    this.beginSwing();
+  }
+
+  /** (re)start the horizontal sweep from centre for the current block */
+  private beginSwing() {
     this.aimX = 0;
     this.aimAngle = 0;
+    this.swingStart = this.time;
     this.awaiting = true;
+  }
+
+  /** auto-oscillate the current block; called every frame while awaiting a drop */
+  private updateSwing() {
+    if (this.phase !== "playing" || !this.awaiting || !this.pending) return;
+    const period = swingPeriodMs(this.placedCount);
+    const center = this.topBlockCenterX(); // crane hovers above the tower top
+    const offset = swingOffset(this.time - this.swingStart, SWING_RANGE, period);
+    this.setAim(center + offset);
   }
 
   drop() {
@@ -310,10 +341,6 @@ export class Game {
     this.aimX = Math.max(-AIM_RANGE, Math.min(AIM_RANGE, worldX));
   }
 
-  nudge(dir: number) {
-    this.setAim(this.aimX + dir * 10);
-  }
-
   rotate(dir: number) {
     if (this.phase !== "playing" || !this.awaiting) return;
     this.aimAngle += dir * (Math.PI / 12);
@@ -330,7 +357,7 @@ export class Game {
     if (isCleared(this.placedCount, TOTAL_BLOCKS)) {
       this.clearGame();
     } else {
-      this.spawnPending();
+      this.advanceQueue();
     }
     this.emit(true);
   }
@@ -411,17 +438,32 @@ export class Game {
     return heightMeters(this.settledTopY());
   }
 
-  /** centre-x of the highest settled block (the surface the next block lands on) */
-  private topBlockCenterX(): number {
+  /** the highest settled block (the surface the next block lands on) */
+  private topSettledBlock(): Block | null {
     let topY = Infinity;
-    let x = 0;
+    let top: Block | null = null;
     for (const b of this.blocks) {
       if (b.settled && b.body.bounds.min.y < topY) {
         topY = b.body.bounds.min.y;
-        x = b.body.position.x;
+        top = b;
       }
     }
-    return x;
+    return top;
+  }
+
+  /** centre-x of the highest settled block (the surface the next block lands on) */
+  private topBlockCenterX(): number {
+    return this.topSettledBlock()?.body.position.x ?? 0;
+  }
+
+  /** centre-y of the highest settled block (for drift measurement in tests) */
+  private topBlockTopY(): number {
+    return this.topSettledBlock()?.body.position.y ?? 0;
+  }
+
+  /** angle (rad) of the highest settled block (for wobble measurement in tests) */
+  private topBlockAngle(): number {
+    return this.topSettledBlock()?.body.angle ?? 0;
   }
 
   private focusTopY(): number {
@@ -875,6 +917,7 @@ export class Game {
     this.time += dt;
 
     if (this.phase === "playing" || this.phase === "gameover" || this.phase === "clear") {
+      this.updateSwing();
       this.acc += dt;
       let steps = 0;
       while (this.acc >= FIXED_DT && steps < 5) {
@@ -904,8 +947,12 @@ export class Game {
       altitude01: altitudeNorm(this.currentHeightM()),
       wobble: this.wobble,
       cleared: this.cleared,
+      next:
+        this.phase === "playing" && this.nextSpec
+          ? { kind: this.nextSpec.kind, color: this.nextSpec.color }
+          : null,
     };
-    const key = `${hud.phase}|${hud.placed}|${hud.awaitingDrop}|${hud.heightM.toFixed(1)}|${hud.wobble > 0.28}`;
+    const key = `${hud.phase}|${hud.placed}|${hud.awaitingDrop}|${hud.heightM.toFixed(1)}|${hud.wobble > 0.28}|${hud.next?.kind ?? ""}|${hud.next?.color ?? ""}`;
     const now = this.time;
     if (force || key !== this.lastEmitKey || now - this.lastEmit > 140) {
       this.lastEmitKey = key;
@@ -915,58 +962,21 @@ export class Game {
   }
 
   // ---------- input ----------
-
-  private worldFromClientX(clientX: number): number {
-    const rect = this.canvas.getBoundingClientRect();
-    const localX = clientX - rect.left;
-    return (localX - this.W / 2 - this.cam.shakeX) / this.cam.zoom;
-  }
+  // The block auto-swings left↔right; a tap/click anywhere (or Space/Enter)
+  // drops it at its current x. No drag-aiming any more.
 
   private bindInput() {
     const c = this.canvas;
     const onDown = (e: PointerEvent) => {
       if (this.phase !== "playing" || !this.awaiting) return;
       SFX.primeAudio();
-      this.ptrActive = true;
-      this.ptrMoved = false;
-      this.ptrStartX = e.clientX;
-      this.ptrStartY = e.clientY;
-      try {
-        c.setPointerCapture(e.pointerId);
-      } catch {
-        /* noop */
-      }
-    };
-    const onMove = (e: PointerEvent) => {
-      if (!this.ptrActive) return;
-      const dx = e.clientX - this.ptrStartX;
-      const dy = e.clientY - this.ptrStartY;
-      if (Math.hypot(dx, dy) > 7) this.ptrMoved = true;
-      if (this.ptrMoved) this.setAim(this.worldFromClientX(e.clientX));
-    };
-    const onUp = (e: PointerEvent) => {
-      if (!this.ptrActive) return;
-      this.ptrActive = false;
-      if (!this.ptrMoved) this.drop();
-      try {
-        c.releasePointerCapture(e.pointerId);
-      } catch {
-        /* noop */
-      }
-    };
-    const onCancel = () => {
-      this.ptrActive = false;
+      this.drop();
+      e.preventDefault();
     };
     c.addEventListener("pointerdown", onDown);
-    c.addEventListener("pointermove", onMove);
-    c.addEventListener("pointerup", onUp);
-    c.addEventListener("pointercancel", onCancel);
     window.addEventListener("keydown", this.onKey);
     this.cleanups.push(
       () => c.removeEventListener("pointerdown", onDown),
-      () => c.removeEventListener("pointermove", onMove),
-      () => c.removeEventListener("pointerup", onUp),
-      () => c.removeEventListener("pointercancel", onCancel),
       () => window.removeEventListener("keydown", this.onKey),
     );
   }
@@ -974,14 +984,6 @@ export class Game {
   private onKey = (e: KeyboardEvent) => {
     if (this.phase !== "playing") return;
     switch (e.key) {
-      case "ArrowLeft":
-        this.nudge(-1);
-        e.preventDefault();
-        break;
-      case "ArrowRight":
-        this.nudge(1);
-        e.preventDefault();
-        break;
       case "ArrowUp":
       case "q":
       case "Q":
@@ -1150,11 +1152,27 @@ export class Game {
         heightM: this.currentHeightM(),
         settledTopY: this.settledTopY(),
         topX: this.topBlockCenterX(),
+        topY: this.topBlockTopY(),
+        topAngle: this.topBlockAngle(),
         blocks: this.blocks.length,
         aimX: this.aimX,
         wobble: this.wobble,
         cleared: this.cleared,
+        pendingKind: this.pending?.kind ?? null,
+        pendingColor: this.pending?.color ?? null,
+        nextKind: this.nextSpec?.kind ?? null,
+        nextColor: this.nextSpec?.color ?? null,
       }),
+      /** deterministically sample block kinds across the whole difficulty ramp */
+      sampleKinds: (n: number) => {
+        const rng = mulberry32(0xc0ffee);
+        const counts: Record<string, number> = {};
+        for (let i = 0; i < n; i++) {
+          const s = makeBlockSpec(100000 + i, i % 130, rng);
+          counts[s.kind] = (counts[s.kind] ?? 0) + 1;
+        }
+        return counts;
+      },
     };
   }
 

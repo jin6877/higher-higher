@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { Game } from "./game/engine";
 import * as SFX from "./game/audio";
 import { formatHeight } from "./game/logic";
-import type { HudState } from "./game/types";
+import type { HudState, ShapeKind } from "./game/types";
 
 export default function App() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -113,6 +113,19 @@ export default function App() {
                   <span className="ml-0.5 text-lg font-bold text-white/70">m</span>
                 </div>
               </div>
+
+              {/* next-block preview */}
+              <div className="flex flex-col items-center rounded-2xl bg-black/30 px-3 py-1.5 backdrop-blur-md">
+                <div className="text-[10px] font-semibold tracking-wide text-white/55">다음</div>
+                <div className="mt-0.5 grid h-9 w-9 place-items-center">
+                  {hud.next ? (
+                    <ShapePreview kind={hud.next.kind} color={hud.next.color} />
+                  ) : (
+                    <div className="h-6 w-6 rounded-md bg-white/10" />
+                  )}
+                </div>
+              </div>
+
               <div className="rounded-2xl bg-black/30 px-4 py-2 text-right backdrop-blur-md">
                 <div className="text-[11px] font-semibold tracking-wide text-white/60">블록</div>
                 <div className="text-3xl font-extrabold leading-none tabular-nums">
@@ -167,7 +180,7 @@ export default function App() {
               </button>
             </div>
             <p className="mt-2 text-center text-[11px] font-medium text-white/40">
-              드래그로 조준 · 탭/스페이스로 드롭 · ←→ 이동
+              블록이 좌우로 왕복해요 · 탭 / 스페이스로 드롭 · ↺↻ 회전
             </p>
           </div>
         </>
@@ -209,7 +222,7 @@ export default function App() {
           </div>
 
           <div className="pointer-events-none relative mb-8 flex justify-center gap-5 px-6 text-center text-xs text-white/55">
-            <Feat icon="🎯" label="조준해서 드롭" />
+            <Feat icon="🎯" label="타이밍 맞춰 드롭" />
             <Feat icon="🧱" label="랜덤 100블록" />
             <Feat icon="🌌" label="우주까지 상승" />
           </div>
@@ -294,5 +307,26 @@ function Stat({ label, value }: { label: string; value: string }) {
       <div className="text-[11px] font-semibold tracking-wide text-white/50">{label}</div>
       <div className="text-2xl font-extrabold tabular-nums">{value}</div>
     </div>
+  );
+}
+
+/** Mini glyph of the upcoming block's shape, in its actual colour. */
+function ShapePreview({ kind, color }: { kind: ShapeKind; color: string }) {
+  const stroke = "rgba(0,0,0,0.28)";
+  const common = { fill: color, stroke, strokeWidth: 1.6, strokeLinejoin: "round" as const };
+  return (
+    <svg viewBox="0 0 40 40" className="h-8 w-8" aria-label={`다음 블록: ${kind}`}>
+      {kind === "square" && <rect x={9} y={9} width={22} height={22} rx={2} {...common} />}
+      {kind === "rect" && <rect x={12} y={6} width={16} height={28} rx={2} {...common} />}
+      {kind === "wide" && <rect x={4} y={14} width={32} height={12} rx={2} {...common} />}
+      {kind === "trapezoid" && <polygon points="6,30 34,30 28,12 12,12" {...common} />}
+      {kind === "lshape" && <polygon points="10,6 19,6 19,25 30,25 30,34 10,34" {...common} />}
+      {kind === "tshape" && (
+        <polygon points="6,8 34,8 34,16 24,16 24,34 16,34 16,16 6,16" {...common} />
+      )}
+      {kind === "circle" && <circle cx={20} cy={20} r={13} {...common} />}
+      {kind === "semicircle" && <path d="M6,27 A14,14 0 0 1 34,27 Z" {...common} />}
+      {kind === "poly" && <polygon points="20,5 32,13 32,27 20,35 8,27 8,13" {...common} />}
+    </svg>
   );
 }

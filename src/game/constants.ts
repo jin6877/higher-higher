@@ -20,8 +20,18 @@ export const PLATFORM_HEIGHT = 60;
  */
 export const FALL_LIMIT = 40;
 
-/** horizontal aim range from centre (world units) */
+/** horizontal aim range from centre (world units) — hard clamp for the crane */
 export const AIM_RANGE = 128;
+
+/**
+ * Auto-swing (crane) parameters. The next block sweeps left↔right on its own;
+ * a tap/click/space drops it at the current x. Slow & forgiving early, quicker
+ * (harder timing) as the tower grows.
+ */
+export const SWING_RANGE = 104; // half-width of the sweep from its centre
+export const SWING_PERIOD_BASE = 3000; // ms for a full there-and-back at the start
+export const SWING_PERIOD_MIN = 1400; // fastest full cycle high up
+export const SWING_RAMP_BLOCKS = 60; // blocks over which speed ramps to max
 
 /** settle thresholds */
 export const SETTLE_SPEED = 0.4;
