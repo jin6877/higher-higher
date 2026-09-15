@@ -1,0 +1,22 @@
+{
+  "name": "higher-higher-server",
+  "private": true,
+  "version": "1.0.0",
+  "description": "높이 높이 글로벌 랭킹 백엔드 — 게임 정적파일 + /api/scores 를 한 프로세스가 서빙",
+  "scripts": {
+    "dev": "tsx watch src/index.ts",
+    "build": "tsc -p tsconfig.json",
+    "start": "node dist/index.js"
+  },
+  "dependencies": {
+    "better-sqlite3": "^11.8.1",
+    "express": "^4.21.2"
+  },
+  "devDependencies": {
+    "@types/better-sqlite3": "^7.6.12",
+    "@types/express": "^4.17.21",
+    "@types/node": "^22.10.5",
+    "tsx": "^4.19.2",
+    "typescript": "^5.7.3"
+  }
+}

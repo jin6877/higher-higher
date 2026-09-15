@@ -1,0 +1,27 @@
+# 높이 높이 — 단일 서비스. brag 의 공용 도커 네트워크(infra-net)에 붙어
+# 엣지 nginx(community-nginx)가 higher.brag.io.kr 트래픽을 컨테이너명으로 프록시한다.
+# 호스트 포트는 열지 않는다(엣지 nginx 만 통해 노출).
+services:
+  higher-higher:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: higher-higher:${IMAGE_TAG:-latest}
+    container_name: higher-higher
+    restart: unless-stopped
+    environment:
+      PORT: "8080"
+      DB_PATH: /app/data/higher.db
+    volumes:
+      # SQLite 랭킹 DB 영구 보존 (컨테이너 재생성/재배포에도 유지)
+      - higher-data:/app/data
+    networks:
+      - infra-net
+
+networks:
+  infra-net:
+    external: true
+    name: infra-net
+
+volumes:
+  higher-data:

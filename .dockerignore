@@ -1,0 +1,10 @@
+.git
+node_modules
+dist
+server/node_modules
+server/dist
+server/data
+server/scratch_smoke
+**/*.log
+docs
+.vercel

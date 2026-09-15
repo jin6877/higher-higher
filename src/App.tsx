@@ -4,6 +4,16 @@ import * as SFX from "./game/audio";
 import { formatHeight } from "./game/logic";
 import { dimLabel } from "./game/dimensions";
 import type { HudState, ShapeKind } from "./game/types";
+import { LeaderboardList } from "./leaderboard/LeaderboardPanel";
+import {
+  loadPlayerName,
+  savePlayerName,
+  submitScore,
+  toHeightCm,
+  type SubmitResult,
+} from "./leaderboard/api";
+
+type SubmitState = "idle" | "sending" | "done" | "error";
 
 export default function App() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -12,6 +22,11 @@ export default function App() {
   const [card, setCard] = useState<string | null>(null);
   const [muted, setMuted] = useState(false);
   const [showModal, setShowModal] = useState(false);
+  const [name, setName] = useState(loadPlayerName());
+  const [submitState, setSubmitState] = useState<SubmitState>("idle");
+  const [result, setResult] = useState<SubmitResult | null>(null);
+  const [showRanking, setShowRanking] = useState(false);
+  const [shareCopied, setShareCopied] = useState(false);
 
   useEffect(() => {
     if (!canvasRef.current) return;
@@ -31,6 +46,8 @@ export default function App() {
   useEffect(() => {
     if (!hud) return;
     if (hud.phase === "gameover" || hud.phase === "clear") {
+      setSubmitState("idle");
+      setResult(null);
       const t = setTimeout(() => setShowModal(true), hud.phase === "clear" ? 400 : 850);
       return () => clearTimeout(t);
     }
@@ -42,13 +59,59 @@ export default function App() {
   const reset = useCallback(() => {
     setCard(null);
     setShowModal(false);
+    setResult(null);
+    setSubmitState("idle");
     gameRef.current?.reset();
   }, []);
   const home = useCallback(() => {
     setCard(null);
     setShowModal(false);
+    setResult(null);
+    setSubmitState("idle");
     gameRef.current?.goHome();
   }, []);
+
+  // 결과 화면에서 도달 기록을 글로벌 랭킹에 제출. 실패해도 게임엔 영향 없음.
+  const submit = useCallback(async () => {
+    if (!hud) return;
+    const trimmed = name.trim();
+    setSubmitState("sending");
+    try {
+      const r = await submitScore({
+        playerName: trimmed || "익명",
+        heightCm: toHeightCm(hud.peakM),
+        blocks: hud.peakBlocks,
+      });
+      savePlayerName(trimmed);
+      setResult(r);
+      setSubmitState("done");
+    } catch {
+      setSubmitState("error");
+    }
+  }, [hud, name]);
+
+  // 게임 링크 + 내 점수를 공유. Web Share 우선, 없으면 클립보드 복사.
+  const shareLink = useCallback(async () => {
+    if (!hud) return;
+    const text = `높이 높이에서 ${formatHeight(hud.peakM)}m · ${hud.peakBlocks}블록 쌓았어요! 🧱 도전해보세요`;
+    const url = window.location.origin;
+    const nav = navigator as Navigator & { share?: (d: unknown) => Promise<void> };
+    if (nav.share) {
+      try {
+        await nav.share({ title: "높이 높이", text, url });
+        return;
+      } catch {
+        return; // 사용자가 공유 취소
+      }
+    }
+    try {
+      await navigator.clipboard.writeText(`${text}\n${url}`);
+      setShareCopied(true);
+      setTimeout(() => setShareCopied(false), 2000);
+    } catch {
+      /* 클립보드 불가 — 무시 */
+    }
+  }, [hud]);
 
   const toggleMute = useCallback(() => {
     setMuted((m) => {
@@ -220,6 +283,13 @@ export default function App() {
               시작하기
             </button>
 
+            <button
+              onClick={() => setShowRanking(true)}
+              className="pointer-events-auto mt-3 animate-[rise_1s_ease-out] rounded-2xl bg-white/10 px-6 py-2.5 text-sm font-bold text-white/80 backdrop-blur-md transition hover:bg-white/20 active:scale-95"
+            >
+              🏆 글로벌 랭킹
+            </button>
+
             {hud && hud.bestM > 0 && (
               <div className="pointer-events-none mt-5 rounded-2xl bg-black/25 px-5 py-2 text-sm font-semibold text-white/70 backdrop-blur-md">
                 🏆 최고 기록 {formatHeight(hud.bestM)}m · {hud.bestBlocks}블록
@@ -239,7 +309,7 @@ export default function App() {
       {(phase === "gameover" || phase === "clear") && showModal && hud && (
         <div className="absolute inset-0 z-30 flex items-center justify-center px-6">
           <div className="pointer-events-none absolute inset-0 bg-black/45 backdrop-blur-[2px]" />
-          <div className="pointer-events-auto relative w-full max-w-sm animate-[pop-in_0.35s_ease-out] rounded-3xl border border-white/10 bg-[#12173a]/95 p-6 text-center shadow-2xl">
+          <div className="pointer-events-auto relative max-h-[92vh] w-full max-w-sm animate-[pop-in_0.35s_ease-out] overflow-y-auto rounded-3xl border border-white/10 bg-[#12173a]/95 p-6 text-center shadow-2xl">
             <div className="text-5xl">{phase === "clear" ? "🏆" : "💥"}</div>
             <h2 className="mt-2 text-2xl font-black tracking-tight">
               {phase === "clear" ? "완주 성공!" : "탑이 무너졌어요"}
@@ -261,6 +331,54 @@ export default function App() {
               )}
             </div>
 
+            {/* ===== 글로벌 랭킹 등록 / 결과 ===== */}
+            {hud.peakBlocks > 0 && (
+              <div className="mt-4 rounded-2xl bg-white/5 p-3">
+                {submitState === "done" && result ? (
+                  <>
+                    <div className="mb-2 text-sm font-bold text-white/80">
+                      🏆 내 순위 <span className="text-[#FFD166]">#{result.rank}</span>
+                      <span className="ml-1 font-medium text-white/45">
+                        / 총 {result.totalCount}명
+                      </span>
+                    </div>
+                    <LeaderboardList
+                      preload={result.top}
+                      highlightName={name.trim() || "익명"}
+                      limit={10}
+                    />
+                  </>
+                ) : (
+                  <>
+                    <div className="mb-2 text-left text-xs font-semibold text-white/55">
+                      글로벌 랭킹에 기록을 남겨보세요
+                    </div>
+                    <div className="flex gap-2">
+                      <input
+                        value={name}
+                        onChange={(e) => setName(e.target.value)}
+                        maxLength={20}
+                        placeholder="닉네임"
+                        className="min-w-0 flex-1 rounded-xl bg-white/10 px-3 py-2.5 text-sm font-semibold text-white outline-none ring-1 ring-white/10 placeholder:text-white/35 focus:ring-[#FFD166]/50"
+                      />
+                      <button
+                        onClick={submit}
+                        disabled={submitState === "sending"}
+                        className="shrink-0 rounded-xl bg-gradient-to-r from-[#FF6B9D] to-[#FFD166] px-4 py-2.5 text-sm font-extrabold text-[#2a0f28] transition hover:brightness-110 active:scale-95 disabled:opacity-60"
+                      >
+                        {submitState === "sending" ? "등록 중…" : "랭킹 등록"}
+                      </button>
+                    </div>
+                    {submitState === "error" && (
+                      <p className="mt-2 text-left text-xs font-medium text-red-300">
+                        등록에 실패했어요. 잠시 후 다시 시도해주세요.
+                      </p>
+                    )}
+                  </>
+                )}
+              </div>
+            )}
+
             {card && (
               <img
                 src={card}
@@ -277,18 +395,47 @@ export default function App() {
                 다시 하기
               </button>
               <button
-                onClick={card ? shareCard : makeCard}
+                onClick={shareLink}
                 className="rounded-2xl bg-white/12 py-3 font-bold text-white/90 backdrop-blur-md transition hover:bg-white/20 active:scale-95"
               >
-                {card ? "저장 / 공유" : "결과 카드"}
+                {shareCopied ? "링크 복사됨! 📋" : "🔗 공유하기"}
               </button>
             </div>
+            <button
+              onClick={card ? shareCard : makeCard}
+              className="mt-3 w-full rounded-2xl bg-white/[0.08] py-2.5 text-sm font-semibold text-white/70 backdrop-blur-md transition hover:bg-white/15 active:scale-95"
+            >
+              {card ? "🖼️ 결과 카드 저장 / 공유" : "🖼️ 결과 카드 만들기"}
+            </button>
             <button
               onClick={home}
               className="mt-3 text-sm font-semibold text-white/45 transition hover:text-white/70"
             >
               홈으로
             </button>
+          </div>
+        </div>
+      )}
+
+      {/* ================= RANKING OVERLAY (home) ================= */}
+      {showRanking && (
+        <div className="absolute inset-0 z-40 flex items-center justify-center px-6">
+          <div
+            className="absolute inset-0 bg-black/55"
+            onClick={() => setShowRanking(false)}
+          />
+          <div className="pointer-events-auto relative max-h-[85vh] w-full max-w-sm overflow-y-auto rounded-3xl border border-white/10 bg-[#12173a]/95 p-6 shadow-2xl">
+            <div className="mb-4 flex items-center justify-between">
+              <h2 className="text-xl font-black tracking-tight">🏆 글로벌 랭킹</h2>
+              <button
+                onClick={() => setShowRanking(false)}
+                className="grid h-8 w-8 place-items-center rounded-full bg-white/10 text-white/70 transition hover:bg-white/20"
+                aria-label="닫기"
+              >
+                ✕
+              </button>
+            </div>
+            <LeaderboardList limit={20} highlightName={name.trim() || undefined} />
           </div>
         </div>
       )}
