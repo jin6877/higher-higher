@@ -111,6 +111,9 @@ export class Game {
 
   private phase: Phase = "home";
   private cleared = false;
+  // Snapshot of the score card taken at the last successful placement, so a
+  // collapsed/tumbling tower is never what gets shared or submitted to ranking.
+  private lastCard: string | null = null;
 
   private aimX = 0;
   private aimAngle = 0;
@@ -268,6 +271,7 @@ export class Game {
     this.peakHeightM = 0;
     this.peakBlocks = 0;
     this.cleared = false;
+    this.lastCard = null;
     this.wobble = 0;
     this.lastColor = undefined;
     this.phase = "playing";
@@ -364,6 +368,9 @@ export class Game {
     this.active = null;
     this.placedCount++;
     this.updatePeak(); // lock in this height before a possible clear/collapse
+    // Snapshot the intact tower now; overwrites the previous shot. If the tower
+    // topples next, this last good snapshot is what we share/submit.
+    this.lastCard = this.renderScoreCard();
     SFX.sfxPlace();
     this.burst(b.body.position.x, b.body.bounds.min.y, b.spec.color, 10, false);
     if (isCleared(this.placedCount, TOTAL_BLOCKS)) {
@@ -1269,6 +1276,14 @@ export class Game {
   // ---------- score card ----------
 
   captureScoreCard(): string {
+    // On collapse the live blocks are already tumbling, so fall back to the
+    // snapshot taken at the last placement (intact tower). On clear the tower
+    // still stands, so render live to include the "완주 성공!" state.
+    if (this.phase === "gameover" && this.lastCard) return this.lastCard;
+    return this.renderScoreCard();
+  }
+
+  private renderScoreCard(): string {
     const W = 1080;
     const H = 1350;
     const cv = document.createElement("canvas");
