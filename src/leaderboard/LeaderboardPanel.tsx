@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { fetchLeaderboard, heightCmToM, type ScoreEntry } from "./api";
+import { fetchLeaderboard, heightCmToM, towerImageUrl, type ScoreEntry } from "./api";
 
 /**
  * Top N 랭킹 리스트. preload 가 있으면(제출 직후 받은 Top N) 그걸 그대로 그리고,
@@ -17,6 +17,7 @@ export function LeaderboardList({
 }) {
   const [rows, setRows] = useState<ScoreEntry[] | null>(preload ?? null);
   const [err, setErr] = useState(false);
+  const [selected, setSelected] = useState<ScoreEntry | null>(null);
 
   useEffect(() => {
     if (preload) {
@@ -47,32 +48,86 @@ export function LeaderboardList({
   const maxCm = rows.length ? rows[0].heightCm : 0;
 
   return (
-    <ol className="space-y-1.5">
-      {rows.slice(0, limit).map((s, i) => {
-        const mine = !!highlightName && s.playerName === highlightName;
-        const medal = i === 0 ? "🥇" : i === 1 ? "🥈" : i === 2 ? "🥉" : `${s.rank}`;
-        return (
-          <li
-            key={`${s.rank}-${i}`}
-            className={`flex items-center gap-2.5 rounded-xl px-3 py-2 text-left ${
-              mine ? "bg-[#FFD166]/20 ring-1 ring-[#FFD166]/50" : "bg-white/5"
-            }`}
+    <>
+      <ol className="space-y-1.5">
+        {rows.slice(0, limit).map((s, i) => {
+          const mine = !!highlightName && s.playerName === highlightName;
+          const medal = i === 0 ? "🥇" : i === 1 ? "🥈" : i === 2 ? "🥉" : `${s.rank}`;
+          const clickable = s.hasImage;
+          return (
+            <li key={`${s.rank}-${i}`}>
+              <button
+                type="button"
+                disabled={!clickable}
+                onClick={() => clickable && setSelected(s)}
+                className={`flex w-full items-center gap-2.5 rounded-xl px-3 py-2 text-left transition ${
+                  mine ? "bg-[#FFD166]/20 ring-1 ring-[#FFD166]/50" : "bg-white/5"
+                } ${clickable ? "cursor-pointer hover:bg-white/12 active:scale-[0.99]" : "cursor-default"}`}
+              >
+                <span className="w-7 shrink-0 text-center text-sm font-bold tabular-nums text-white/70">
+                  {medal}
+                </span>
+                <MiniTower ratio={maxCm > 0 ? s.heightCm / maxCm : 0} />
+                <span className="flex-1 truncate text-sm font-semibold">
+                  {s.playerName}
+                  {clickable && <span className="ml-1.5 text-xs text-white/35">🗼</span>}
+                </span>
+                <span className="shrink-0 text-sm font-extrabold tabular-nums text-[#FFD166]">
+                  {heightCmToM(s.heightCm)}m
+                </span>
+                <span className="w-12 shrink-0 text-right text-xs tabular-nums text-white/45">
+                  {s.blocks}블록
+                </span>
+              </button>
+            </li>
+          );
+        })}
+      </ol>
+
+      {selected && (
+        <TowerDetail entry={selected} onClose={() => setSelected(null)} />
+      )}
+    </>
+  );
+}
+
+/** 클릭한 기록의 실제 쌓은 탑 스냅샷을 크게 보여주는 오버레이. */
+function TowerDetail({ entry, onClose }: { entry: ScoreEntry; onClose: () => void }) {
+  const [failed, setFailed] = useState(false);
+  return (
+    <div className="fixed inset-0 z-[60] flex items-center justify-center p-4">
+      <div className="absolute inset-0 bg-black/80" onClick={onClose} />
+      <div className="pointer-events-auto relative flex max-h-[92vh] w-full max-w-xs flex-col items-center">
+        <div className="mb-2 flex w-full items-center justify-between px-1">
+          <div className="min-w-0">
+            <div className="truncate text-base font-black">{entry.playerName}</div>
+            <div className="text-xs font-semibold text-white/55">
+              <span className="text-[#FFD166]">{heightCmToM(entry.heightCm)}m</span> ·{" "}
+              {entry.blocks}블록 · {entry.rank}위
+            </div>
+          </div>
+          <button
+            onClick={onClose}
+            className="grid h-8 w-8 shrink-0 place-items-center rounded-full bg-white/10 text-white/70 transition hover:bg-white/20"
+            aria-label="닫기"
           >
-            <span className="w-7 shrink-0 text-center text-sm font-bold tabular-nums text-white/70">
-              {medal}
-            </span>
-            <MiniTower ratio={maxCm > 0 ? s.heightCm / maxCm : 0} />
-            <span className="flex-1 truncate text-sm font-semibold">{s.playerName}</span>
-            <span className="shrink-0 text-sm font-extrabold tabular-nums text-[#FFD166]">
-              {heightCmToM(s.heightCm)}m
-            </span>
-            <span className="w-12 shrink-0 text-right text-xs tabular-nums text-white/45">
-              {s.blocks}블록
-            </span>
-          </li>
-        );
-      })}
-    </ol>
+            ✕
+          </button>
+        </div>
+        {failed ? (
+          <div className="flex h-64 w-full items-center justify-center rounded-2xl bg-white/5 text-sm text-white/40">
+            탑 이미지를 불러오지 못했어요
+          </div>
+        ) : (
+          <img
+            src={towerImageUrl(entry.id)}
+            alt={`${entry.playerName}의 탑`}
+            onError={() => setFailed(true)}
+            className="max-h-[80vh] w-auto rounded-2xl border border-white/10 shadow-2xl"
+          />
+        )}
+      </div>
+    </div>
   );
 }
 

@@ -6,6 +6,9 @@ import fs from "node:fs";
 const DB_PATH = process.env.DB_PATH ?? path.join(process.cwd(), "data", "higher.db");
 fs.mkdirSync(path.dirname(DB_PATH), { recursive: true });
 
+/** 데이터 디렉토리 — 탑 이미지(towers/)도 여기에 둔다. */
+export const DATA_DIR = path.dirname(DB_PATH);
+
 const db = new Database(DB_PATH);
 db.pragma("journal_mode = WAL");
 
@@ -47,13 +50,25 @@ export function topScores(limit: number): ScoreRow[] {
   return topStmt.all(limit) as ScoreRow[];
 }
 
+/** 점수 저장 후 새 row id 반환(탑 이미지 파일명으로 사용). */
 export function insertScore(
   name: string,
   heightCm: number,
   blocks: number,
   ip: string | null
-): void {
-  insertStmt.run(name, heightCm, blocks, ip);
+): number {
+  const info = insertStmt.run(name, heightCm, blocks, ip);
+  return Number(info.lastInsertRowid);
+}
+
+/** 상위 N개 점수의 id 집합 — 탑 이미지 용량 관리(top-N 만 보존)에 쓴다. */
+export function topScoreIds(limit: number): number[] {
+  const rows = db
+    .prepare(
+      `SELECT id FROM score ORDER BY height_cm DESC, blocks DESC, id ASC LIMIT ?`
+    )
+    .all(limit) as { id: number }[];
+  return rows.map((r) => r.id);
 }
 
 /** 이 기록보다 '엄격히 나은' 제출 수 + 1 = 순위. */

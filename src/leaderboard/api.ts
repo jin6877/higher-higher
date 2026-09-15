@@ -6,11 +6,19 @@
 const API_BASE = (import.meta.env.VITE_API_BASE ?? "/api").replace(/\/+$/, "");
 
 export interface ScoreEntry {
+  id: number;
   rank: number;
   playerName: string;
   heightCm: number;
   blocks: number;
   createdAt: string;
+  /** 이 기록에 쌓은 탑 스냅샷 이미지가 저장돼 있는지 (있으면 클릭 시 상세 탑을 볼 수 있다). */
+  hasImage: boolean;
+}
+
+/** 특정 기록의 탑 이미지 URL. */
+export function towerImageUrl(id: number): string {
+  return `${API_BASE}/scores/${id}/tower.png`;
 }
 
 export interface SubmitResult {
@@ -50,6 +58,8 @@ export async function submitScore(input: {
   playerName: string;
   heightCm: number;
   blocks: number;
+  /** 탑 스냅샷 (data:image/png;base64,...) — 있으면 서버가 저장해 랭킹에서 상세로 보여준다. */
+  image?: string;
 }): Promise<SubmitResult> {
   const res = await fetch(`${API_BASE}/scores`, {
     method: "POST",

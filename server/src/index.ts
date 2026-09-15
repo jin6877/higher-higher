@@ -1,12 +1,69 @@
 import express from "express";
 import path from "node:path";
-import { insertScore, rankOf, topScores, totalCount, type ScoreRow } from "./db";
+import fs from "node:fs";
+import {
+  DATA_DIR,
+  insertScore,
+  rankOf,
+  topScoreIds,
+  topScores,
+  totalCount,
+  type ScoreRow,
+} from "./db";
 import { validateScore } from "./validate";
 
 const app = express();
 // nginx 뒤에 있으므로 X-Forwarded-For 를 신뢰해 req.ip 를 실제 클라이언트 IP 로.
 app.set("trust proxy", true);
-app.use(express.json({ limit: "8kb" }));
+// 탑 이미지(1080×1350 PNG data URL)를 함께 받으므로 본문 상한을 넉넉히.
+app.use(express.json({ limit: "3mb" }));
+
+// ── 탑 이미지 저장소 (볼륨) ──
+const TOWERS_DIR = path.join(DATA_DIR, "towers");
+fs.mkdirSync(TOWERS_DIR, { recursive: true });
+const KEEP_TOWER_IMAGES = 100; // 상위 N개 기록의 탑 이미지만 보존(용량 관리)
+const MAX_IMAGE_BYTES = 2_000_000; // 디코드 후 상한 (~2MB)
+
+function towerPath(id: number): string {
+  return path.join(TOWERS_DIR, `${id}.png`);
+}
+function hasTower(id: number): boolean {
+  return fs.existsSync(towerPath(id));
+}
+
+/** data:image/png;base64,... 를 검증·디코드해 <id>.png 로 저장. 실패해도 점수 저장엔 영향 없음. */
+function saveTowerImage(id: number, dataUrl: unknown): void {
+  if (typeof dataUrl !== "string") return;
+  const prefix = "data:image/png;base64,";
+  if (!dataUrl.startsWith(prefix)) return;
+  const b64 = dataUrl.slice(prefix.length);
+  // 대략적 크기 선검사 (base64 는 원본의 ~4/3)
+  if (b64.length > MAX_IMAGE_BYTES * 1.4) return;
+  try {
+    const buf = Buffer.from(b64, "base64");
+    if (buf.length === 0 || buf.length > MAX_IMAGE_BYTES) return;
+    // PNG 매직넘버 확인
+    if (buf[0] !== 0x89 || buf[1] !== 0x50 || buf[2] !== 0x4e || buf[3] !== 0x47) return;
+    fs.writeFileSync(towerPath(id), buf);
+  } catch {
+    /* 저장 실패 무시 */
+  }
+}
+
+/** 상위 N개 밖의 탑 이미지를 삭제해 용량을 top-N 으로 유지. */
+function pruneTowerImages(): void {
+  try {
+    const keep = new Set(topScoreIds(KEEP_TOWER_IMAGES));
+    for (const f of fs.readdirSync(TOWERS_DIR)) {
+      const m = /^(\d+)\.png$/.exec(f);
+      if (m && !keep.has(Number(m[1]))) {
+        fs.rmSync(path.join(TOWERS_DIR, f), { force: true });
+      }
+    }
+  } catch {
+    /* 정리 실패 무시 */
+  }
+}
 
 // ── best-effort IP Rate Limit (인메모리) — 스크립트 폭주 방지. 랭킹은 캐주얼이라 완만하게. ──
 const WINDOW_MS = 60_000;
@@ -38,11 +95,13 @@ function fail(code: string, message: string) {
 }
 function toEntry(r: ScoreRow, rank: number) {
   return {
+    id: r.id,
     rank,
     playerName: r.player_name,
     heightCm: r.height_cm,
     blocks: r.blocks,
     createdAt: r.created_at,
+    hasImage: hasTower(r.id),
   };
 }
 
@@ -58,22 +117,39 @@ app.get("/api/scores", (req, res) => {
   res.json(ok({ top }));
 });
 
-// 점수 제출 → 내 순위 + Top N.
+// 특정 기록의 탑 이미지 (PNG). 없으면 404.
+app.get("/api/scores/:id/tower.png", (req, res) => {
+  const id = Number(req.params.id);
+  if (!Number.isInteger(id) || id <= 0 || !hasTower(id)) {
+    return res.status(404).type("text/plain").send("no tower");
+  }
+  res.type("image/png");
+  res.setHeader("Cache-Control", "public, max-age=86400, immutable");
+  res.sendFile(towerPath(id));
+});
+
+// 점수 제출 → 내 순위 + Top N. body.image(선택) = 탑 스냅샷 data URL.
 app.post("/api/scores", (req, res) => {
   const ip = String(req.ip ?? "");
   if (rateLimited(ip)) {
     return res.status(429).json(fail("RATE_LIMITED", "잠시 후 다시 시도해주세요."));
   }
   const clean = validateScore(req.body);
-  insertScore(clean.playerName, clean.heightCm, clean.blocks, ip || null);
+  const id = insertScore(clean.playerName, clean.heightCm, clean.blocks, ip || null);
+  const body = (req.body ?? {}) as Record<string, unknown>;
+  saveTowerImage(id, body.image);
+  pruneTowerImages();
+
   const rank = rankOf(clean.heightCm, clean.blocks);
   const top = topScores(20).map((r, i) => toEntry(r, i + 1));
   const entry = {
+    id,
     rank,
     playerName: clean.playerName,
     heightCm: clean.heightCm,
     blocks: clean.blocks,
     createdAt: new Date().toISOString(),
+    hasImage: hasTower(id),
   };
   res.json(ok({ rank, totalCount: totalCount(), entry, top }));
 });

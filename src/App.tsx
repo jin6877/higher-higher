@@ -81,6 +81,7 @@ export default function App() {
         playerName: trimmed || "익명",
         heightCm: toHeightCm(hud.peakM),
         blocks: hud.peakBlocks,
+        image: gameRef.current?.captureScoreCard(),
       });
       savePlayerName(trimmed);
       setResult(r);
@@ -261,9 +262,6 @@ export default function App() {
           <div className="pointer-events-none absolute inset-0 bg-gradient-to-b from-[#0b1026]/55 via-transparent to-[#0b1026]/80" />
           <div className="relative flex flex-1 flex-col items-center justify-center px-6 text-center">
             <div className="animate-[rise_0.7s_ease-out] ">
-              <div className="mb-3 inline-flex items-center gap-2 rounded-full bg-white/10 px-4 py-1.5 text-xs font-semibold tracking-wide text-white/80 backdrop-blur-md">
-                <span className="h-2 w-2 rounded-full bg-[#06D6A0]" /> 물리 기반 블록 쌓기
-              </div>
               <h1 className="bg-gradient-to-br from-white via-[#FFE7B0] to-[#FF9EC4] bg-clip-text text-6xl font-black leading-[0.95] tracking-tight text-transparent drop-shadow-[0_4px_20px_rgba(255,107,157,0.25)] sm:text-7xl">
                 높이 높이
               </h1>
@@ -295,12 +293,6 @@ export default function App() {
                 🏆 최고 기록 {formatHeight(hud.bestM)}m · {hud.bestBlocks}블록
               </div>
             )}
-          </div>
-
-          <div className="pointer-events-none relative mb-8 flex justify-center gap-5 px-6 text-center text-xs text-white/55">
-            <Feat icon="🎯" label="타이밍 맞춰 드롭" />
-            <Feat icon="🧱" label="랜덤 100블록" />
-            <Feat icon="🌌" label="우주까지 상승" />
           </div>
         </div>
       )}
@@ -439,17 +431,6 @@ export default function App() {
           </div>
         </div>
       )}
-    </div>
-  );
-}
-
-function Feat({ icon, label }: { icon: string; label: string }) {
-  return (
-    <div className="flex flex-col items-center gap-1">
-      <div className="grid h-11 w-11 place-items-center rounded-2xl bg-white/10 text-xl backdrop-blur-md">
-        {icon}
-      </div>
-      <span className="font-medium">{label}</span>
     </div>
   );
 }
