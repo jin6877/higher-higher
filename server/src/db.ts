@@ -32,6 +32,11 @@ export interface ScoreRow {
   created_at: string;
 }
 
+/** 검색 결과 행 — 전체 랭킹 기준의 실제 순위를 함께 담는다. */
+export interface RankedScoreRow extends ScoreRow {
+  rank: number;
+}
+
 const topStmt = db.prepare(
   `SELECT id, player_name, height_cm, blocks, created_at
      FROM score
@@ -45,6 +50,19 @@ const betterStmt = db.prepare(
   `SELECT COUNT(*) AS c FROM score WHERE height_cm > ? OR (height_cm = ? AND blocks > ?)`
 );
 const countStmt = db.prepare(`SELECT COUNT(*) AS c FROM score`);
+// 닉네임 부분 일치 검색. 순위는 topScores 와 똑같은 정렬 기준으로 매긴 뒤 필터링해야
+// Top N 밖의 기록도 전체 랭킹에서의 진짜 순위를 얻는다.
+const searchStmt = db.prepare(
+  `SELECT id, player_name, height_cm, blocks, created_at, rank
+     FROM (
+       SELECT id, player_name, height_cm, blocks, created_at,
+              ROW_NUMBER() OVER (ORDER BY height_cm DESC, blocks DESC, id ASC) AS rank
+         FROM score
+     )
+    WHERE player_name LIKE ? ESCAPE '\\'
+    ORDER BY rank ASC
+    LIMIT ?`
+);
 
 export function topScores(limit: number): ScoreRow[] {
   return topStmt.all(limit) as ScoreRow[];
@@ -79,4 +97,11 @@ export function rankOf(heightCm: number, blocks: number): number {
 
 export function totalCount(): number {
   return (countStmt.get() as { c: number }).c;
+}
+
+/** 닉네임 부분 일치 검색(대소문자 무시) — Top N 밖의 기록을 찾는 용도. */
+export function searchScores(term: string, limit: number): RankedScoreRow[] {
+  // LIKE 와일드카드(%, _)와 이스케이프 문자를 리터럴로 취급해, 검색어로 전체 매칭되는 걸 막는다.
+  const escaped = term.replace(/[\\%_]/g, (c) => "\\" + c);
+  return searchStmt.all(`%${escaped}%`, limit) as RankedScoreRow[];
 }

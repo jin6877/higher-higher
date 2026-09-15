@@ -54,6 +54,18 @@ export async function fetchLeaderboard(limit = 20): Promise<ScoreEntry[]> {
   return body.data.top;
 }
 
+/** 닉네임으로 기록 검색 — Top 20 밖의 순위를 찾을 때 쓴다. 결과에는 전체 기준 실제 순위가 담긴다. */
+export async function searchScores(q: string, limit = 20): Promise<ScoreEntry[]> {
+  const res = await fetch(
+    `${API_BASE}/scores/search?q=${encodeURIComponent(q)}&limit=${limit}`,
+    { headers: { Accept: "application/json" } }
+  );
+  if (!res.ok) throw new Error(`search ${res.status}`);
+  const body = (await res.json()) as ApiResponse<{ results: ScoreEntry[] }>;
+  if (!body.success || !body.data) throw new Error(body.error?.message ?? "failed");
+  return body.data.results;
+}
+
 export async function submitScore(input: {
   playerName: string;
   heightCm: number;

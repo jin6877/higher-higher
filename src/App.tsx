@@ -427,7 +427,7 @@ export default function App() {
                 ✕
               </button>
             </div>
-            <LeaderboardList limit={20} highlightName={name.trim() || undefined} />
+            <LeaderboardList limit={20} searchable highlightName={name.trim() || undefined} />
           </div>
         </div>
       )}

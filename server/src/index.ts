@@ -5,6 +5,7 @@ import {
   DATA_DIR,
   insertScore,
   rankOf,
+  searchScores,
   topScoreIds,
   topScores,
   totalCount,
@@ -115,6 +116,18 @@ app.get("/api/scores", (req, res) => {
   const limit = Math.min(Math.max(Number.isFinite(raw) ? raw : 20, 1), 100);
   const top = topScores(limit).map((r, i) => toEntry(r, i + 1));
   res.json(ok({ top }));
+});
+
+// 닉네임 검색 — Top 20 밖의 기록은 이걸로만 찾을 수 있다.
+// (":id/tower.png" 는 세그먼트 수가 달라 이 경로와 충돌하지 않는다.)
+app.get("/api/scores/search", (req, res) => {
+  // 닉네임 상한(20자)과 맞춰 잘라, 긴 검색어로 스캔을 유발하는 걸 막는다.
+  const q = String(req.query.q ?? "").trim().slice(0, 20);
+  if (!q) return res.json(ok({ results: [], totalCount: totalCount() }));
+  const raw = parseInt(String(req.query.limit ?? "20"), 10);
+  const limit = Math.min(Math.max(Number.isFinite(raw) ? raw : 20, 1), 50);
+  const results = searchScores(q, limit).map((r) => toEntry(r, r.rank));
+  res.json(ok({ results, totalCount: totalCount() }));
 });
 
 // 특정 기록의 탑 이미지 (PNG). 없으면 404.
