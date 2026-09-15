@@ -43,6 +43,9 @@ export function LeaderboardList({
       </p>
     );
 
+  // 1위 높이를 기준(100%)으로 각 순위의 미니 타워 높이를 비례 계산 (rows 는 높이 내림차순).
+  const maxCm = rows.length ? rows[0].heightCm : 0;
+
   return (
     <ol className="space-y-1.5">
       {rows.slice(0, limit).map((s, i) => {
@@ -51,13 +54,14 @@ export function LeaderboardList({
         return (
           <li
             key={`${s.rank}-${i}`}
-            className={`flex items-center gap-3 rounded-xl px-3 py-2 text-left ${
+            className={`flex items-center gap-2.5 rounded-xl px-3 py-2 text-left ${
               mine ? "bg-[#FFD166]/20 ring-1 ring-[#FFD166]/50" : "bg-white/5"
             }`}
           >
             <span className="w-7 shrink-0 text-center text-sm font-bold tabular-nums text-white/70">
               {medal}
             </span>
+            <MiniTower ratio={maxCm > 0 ? s.heightCm / maxCm : 0} />
             <span className="flex-1 truncate text-sm font-semibold">{s.playerName}</span>
             <span className="shrink-0 text-sm font-extrabold tabular-nums text-[#FFD166]">
               {heightCmToM(s.heightCm)}m
@@ -69,5 +73,34 @@ export function LeaderboardList({
         );
       })}
     </ol>
+  );
+}
+
+// 게임 블록을 연상시키는 팔레트 — 아래(따뜻)에서 위(밝게)로 쌓인다.
+const BRICK_COLORS = [
+  "#FF6B9D",
+  "#FFD166",
+  "#4ECDC4",
+  "#A78BFA",
+  "#F59E0B",
+  "#38BDF8",
+];
+
+/** 점수(높이) 비례 미니 블록 타워. ratio 0~1 → 1~6칸을 아래부터 쌓아 올린다. */
+function MiniTower({ ratio }: { ratio: number }) {
+  const bricks = Math.max(1, Math.min(6, Math.round(ratio * 6)));
+  return (
+    <div
+      className="flex h-8 w-4 shrink-0 flex-col-reverse items-center gap-[2px]"
+      aria-hidden
+    >
+      {Array.from({ length: bricks }).map((_, i) => (
+        <div
+          key={i}
+          className="w-full rounded-[2px] shadow-sm"
+          style={{ height: 4, background: BRICK_COLORS[i % BRICK_COLORS.length] }}
+        />
+      ))}
+    </div>
   );
 }
