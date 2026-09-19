@@ -160,3 +160,85 @@ export function searchScores(term: string, limit: number, mode: GameMode): Ranke
   const escaped = term.replace(/[\\%_]/g, (c) => "\\" + c);
   return searchStmt.all(mode, `%${escaped}%`, limit) as RankedScoreRow[];
 }
+
+// ---- 이용 통계 (집계값만) ----
+// 공개 페이지(/stats)가 쓰므로 개별 행(IP·UA·세션)은 절대 내보내지 않는다. 날짜는 KST 기준.
+
+export interface UsageStats {
+  daily: { day: string; visitors: number; starts: number; ends: number; submits: number }[];
+  byMode: { mode: string; games: number; avgHeightM: number; avgBlocks: number; avgSec: number; submits: number }[];
+  funnel: { visits: number; starts: number; ends: number; submits: number; shares: number };
+  totals: { todayVisitors: number; todayGames: number; gamesPerSession: number; scores: number };
+}
+
+const KST = "+9 hours";
+
+export function usageStats(): UsageStats {
+  const daily = db
+    .prepare(
+      `SELECT date(created_at, ?) AS day,
+              COUNT(DISTINCT CASE WHEN name = 'visit' THEN session END) AS visitors,
+              SUM(name = 'start')  AS starts,
+              SUM(name = 'end')    AS ends,
+              SUM(name = 'submit') AS submits
+         FROM event
+        WHERE date(created_at, ?) BETWEEN date('now', ?, '-13 days') AND date('now', ?)
+        GROUP BY day ORDER BY day`,
+    )
+    .all(KST, KST, KST, KST) as UsageStats["daily"];
+
+  const byMode = db
+    .prepare(
+      `SELECT e.mode AS mode,
+              COUNT(*) AS games,
+              ROUND(AVG(e.height_cm) / 100.0, 1) AS avgHeightM,
+              ROUND(AVG(e.blocks), 1) AS avgBlocks,
+              ROUND(AVG(e.duration_ms) / 1000.0, 1) AS avgSec,
+              (SELECT COUNT(*) FROM event s WHERE s.name = 'submit' AND s.mode = e.mode) AS submits
+         FROM event e
+        WHERE e.name = 'end' AND e.mode IS NOT NULL
+        GROUP BY e.mode`,
+    )
+    .all() as UsageStats["byMode"];
+
+  const count = (name: string) =>
+    (db.prepare(`SELECT COUNT(*) AS c FROM event WHERE name = ?`).get(name) as { c: number }).c;
+
+  const todayVisitors = (
+    db
+      .prepare(
+        `SELECT COUNT(DISTINCT session) AS c FROM event
+          WHERE name = 'visit' AND date(created_at, ?) = date('now', ?)`,
+      )
+      .get(KST, KST) as { c: number }
+  ).c;
+  const todayGames = (
+    db
+      .prepare(
+        `SELECT COUNT(*) AS c FROM event WHERE name = 'end' AND date(created_at, ?) = date('now', ?)`,
+      )
+      .get(KST, KST) as { c: number }
+  ).c;
+  const perSession = (
+    db
+      .prepare(
+        `SELECT ROUND(AVG(n), 1) AS a FROM
+           (SELECT COUNT(*) AS n FROM event WHERE name = 'end' AND session IS NOT NULL GROUP BY session)`,
+      )
+      .get() as { a: number | null }
+  ).a;
+  const scores = (db.prepare(`SELECT COUNT(*) AS c FROM score`).get() as { c: number }).c;
+
+  return {
+    daily,
+    byMode,
+    funnel: {
+      visits: count("visit"),
+      starts: count("start"),
+      ends: count("end"),
+      submits: count("submit"),
+      shares: count("share"),
+    },
+    totals: { todayVisitors, todayGames, gamesPerSession: perSession ?? 0, scores },
+  };
+}

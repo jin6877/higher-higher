@@ -10,6 +10,7 @@ import {
   topScoreIds,
   topScores,
   totalCount,
+  usageStats,
   type ScoreRow,
 } from "./db";
 import { sanitizeMode, validateEvent, validateScore, type GameMode } from "./validate";
@@ -198,6 +199,11 @@ app.post("/api/events", (req, res) => {
     /* 로그 실패는 무시 */
   }
   res.status(204).end();
+});
+
+// 이용 통계 — /stats 페이지가 쓴다. 집계값만 내보내고 개별 로그(IP·UA·세션)는 나가지 않는다.
+app.get("/api/stats", (_req, res) => {
+  res.json(ok(usageStats()));
 });
 
 // ── 게임 정적 파일 (빌드된 dist) + SPA 폴백 ──
