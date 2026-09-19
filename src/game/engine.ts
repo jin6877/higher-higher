@@ -145,6 +145,7 @@ export class Game {
     this.ctx = canvas.getContext("2d")!;
     this.onState = onState;
     this.record = loadRecord();
+    SFX.preloadBgm(); // 첫 게임 시작 때 받느라 도입부가 늦게 나오지 않도록 미리 받아 둔다
 
     const seedParam = new URLSearchParams(window.location.search).get("seed");
     const seed = seedParam ? Number(seedParam) >>> 0 : (Math.random() * 1e9) >>> 0;
@@ -266,6 +267,7 @@ export class Game {
 
   start() {
     SFX.primeAudio();
+    SFX.startBgm(); // 다시 하기(reset)도 여기로 오므로 매 판 도입부부터
     this.clearBlocks();
     this.placedCount = 0;
     this.peakHeightM = 0;
@@ -288,6 +290,7 @@ export class Game {
   }
 
   goHome() {
+    SFX.stopBgm();
     this.record = loadRecord();
     this.buildDemo();
   }
@@ -387,6 +390,7 @@ export class Game {
     this.updatePeak();
     // finalize on the PEAK reached, never a value that dipped during the run
     this.record = saveRecord(this.peakHeightM, this.peakBlocks);
+    SFX.stopBgm(); // 완주 효과음이 묻히지 않게
     SFX.sfxClear();
     this.confetti();
     this.emit(true);
@@ -401,6 +405,7 @@ export class Game {
     // is already tumbling (blocks falling away), so the live height is lower now.
     this.record = saveRecord(this.peakHeightM, this.peakBlocks);
     this.cam.shakeMag = 14;
+    SFX.stopBgm(); // 무너지는 효과음이 묻히지 않게
     SFX.sfxCollapse();
     this.emit(true);
   }
@@ -1444,6 +1449,7 @@ export class Game {
   }
 
   destroy() {
+    SFX.stopBgm();
     cancelAnimationFrame(this.raf);
     for (const fn of this.cleanups) fn();
     this.cleanups = [];
