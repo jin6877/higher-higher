@@ -3,7 +3,11 @@
 // 로컬 개발: vite.config 의 dev 프록시가 /api → localhost:8080(로컬 서버)로 넘긴다.
 // 어느 환경이든 실패하면 게임 자체는 그대로 동작하고 랭킹 UI 만 비활성/에러 상태가 된다.
 
+import type { GameMode } from "../game/types";
+
 const API_BASE = (import.meta.env.VITE_API_BASE ?? "/api").replace(/\/+$/, "");
+
+// 순위표는 모드별로 나뉜다. 모드를 빼먹으면 서버가 기존 모드(도전)로 본다.
 
 export interface ScoreEntry {
   id: number;
@@ -44,8 +48,8 @@ export function heightCmToM(cm: number): string {
   return (cm / 100).toFixed(1);
 }
 
-export async function fetchLeaderboard(limit = 20): Promise<ScoreEntry[]> {
-  const res = await fetch(`${API_BASE}/scores?limit=${limit}`, {
+export async function fetchLeaderboard(limit = 20, mode: GameMode = "random"): Promise<ScoreEntry[]> {
+  const res = await fetch(`${API_BASE}/scores?limit=${limit}&mode=${mode}`, {
     headers: { Accept: "application/json" },
   });
   if (!res.ok) throw new Error(`leaderboard ${res.status}`);
@@ -55,9 +59,13 @@ export async function fetchLeaderboard(limit = 20): Promise<ScoreEntry[]> {
 }
 
 /** 닉네임으로 기록 검색 — Top 20 밖의 순위를 찾을 때 쓴다. 결과에는 전체 기준 실제 순위가 담긴다. */
-export async function searchScores(q: string, limit = 20): Promise<ScoreEntry[]> {
+export async function searchScores(
+  q: string,
+  limit = 20,
+  mode: GameMode = "random",
+): Promise<ScoreEntry[]> {
   const res = await fetch(
-    `${API_BASE}/scores/search?q=${encodeURIComponent(q)}&limit=${limit}`,
+    `${API_BASE}/scores/search?q=${encodeURIComponent(q)}&limit=${limit}&mode=${mode}`,
     { headers: { Accept: "application/json" } }
   );
   if (!res.ok) throw new Error(`search ${res.status}`);
@@ -70,6 +78,7 @@ export async function submitScore(input: {
   playerName: string;
   heightCm: number;
   blocks: number;
+  mode: GameMode;
   /** 탑 스냅샷 (data:image/png;base64,...) — 있으면 서버가 저장해 랭킹에서 상세로 보여준다. */
   image?: string;
 }): Promise<SubmitResult> {

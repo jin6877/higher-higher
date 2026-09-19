@@ -2,6 +2,7 @@
 // These functions are exercised directly by scripts/test-logic.mts.
 
 import { FALL_LIMIT, PIXELS_PER_METER, PLATFORM_TOP_Y, TOTAL_BLOCKS } from "./constants";
+import type { GameMode } from "./types";
 
 /** Minimal view of a placed block used for judging the tower. */
 export interface BlockLite {
@@ -89,16 +90,19 @@ export function formatHeight(m: number): string {
 
 // ---- localStorage record persistence (guarded, side-effectful) ----
 
+// 모드마다 따로 보관한다 — 쉬운 모드 기록이 도전 모드 최고 기록을 덮어쓰면 안 된다.
+// 기존 키(v1)는 모드가 생기기 전 기록이라 그대로 도전 모드 기록으로 쓴다.
 const REC_KEY = "higher-higher:best:v1";
+const recKey = (mode: GameMode) => (mode === "random" ? REC_KEY : `${REC_KEY}:${mode}`);
 
 export interface Record {
   heightM: number;
   blocks: number;
 }
 
-export function loadRecord(): Record {
+export function loadRecord(mode: GameMode = "random"): Record {
   try {
-    const raw = typeof localStorage !== "undefined" && localStorage.getItem(REC_KEY);
+    const raw = typeof localStorage !== "undefined" && localStorage.getItem(recKey(mode));
     if (!raw) return { heightM: 0, blocks: 0 };
     const parsed = JSON.parse(raw);
     return {
@@ -111,15 +115,15 @@ export function loadRecord(): Record {
 }
 
 /** Persist a run if it beats the stored record. Returns the (possibly updated) record. */
-export function saveRecord(heightM: number, blocks: number): Record {
-  const cur = loadRecord();
+export function saveRecord(heightM: number, blocks: number, mode: GameMode = "random"): Record {
+  const cur = loadRecord(mode);
   const next: Record = {
     heightM: Math.max(cur.heightM, heightM),
     blocks: Math.max(cur.blocks, blocks),
   };
   try {
     if (typeof localStorage !== "undefined") {
-      localStorage.setItem(REC_KEY, JSON.stringify(next));
+      localStorage.setItem(recKey(mode), JSON.stringify(next));
     }
   } catch {
     // ignore quota / privacy-mode errors

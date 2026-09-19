@@ -4,7 +4,10 @@
 
 import { BLOCK_COLORS } from "./palette";
 import { pick, randInt, randRange, type Rng } from "./rng";
-import type { BlockSpec, ShapeKind } from "./types";
+import type { BlockSpec, GameMode, ShapeKind } from "./types";
+
+/** 기본 모드에서 쓰는 정사각형 한 변(월드 단위). 매번 같아야 쌓기가 쉬워진다. */
+export const BASIC_SQUARE = 54;
 
 export interface CompoundPart {
   x: number;
@@ -192,10 +195,14 @@ export function makeBlockSpec(
   index: number,
   rng: Rng,
   avoidColor?: string,
+  mode: GameMode = "random",
 ): BlockSpec {
-  const pool = shapePoolFor(index);
-  const kind = pick(rng, pool);
-  const shape = resolve(kind, rng);
+  // 기본 모드: 모양도 크기도 고정된 정사각형만. 색만 바뀐다.
+  const shape: ResolvedShape =
+    mode === "basic"
+      ? { kind: "square", w: BASIC_SQUARE, h: BASIC_SQUARE, cx: 0, cy: 0, roundish: false }
+      : resolve(pick(rng, shapePoolFor(index)), rng);
+  const kind = shape.kind;
 
   let color = pick(rng, BLOCK_COLORS);
   if (avoidColor) {

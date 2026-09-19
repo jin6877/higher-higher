@@ -1,10 +1,11 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, type CSSProperties } from "react";
 import { Game } from "./game/engine";
 import * as SFX from "./game/audio";
-import { formatHeight } from "./game/logic";
+import { formatHeight, loadRecord } from "./game/logic";
 import { dimLabel } from "./game/dimensions";
-import type { HudState, ShapeKind } from "./game/types";
+import type { GameMode, HudState, ShapeKind } from "./game/types";
 import { AdFit } from "./ads/AdFit";
+import { logEvent } from "./analytics";
 import { LeaderboardList } from "./leaderboard/LeaderboardPanel";
 import {
   loadPlayerName,
@@ -20,6 +21,17 @@ type SubmitState = "idle" | "sending" | "done" | "error";
 // 광고를 두면 잘못 누른 클릭(무효 클릭)이 쌓인다.
 const RESULT_AD_UNIT = "DAN-kFN7pcmVv6uh0UQ7"; // 320×100
 
+// 결과 창이 뜬 뒤 '다시 하기' 를 누를 수 있게 되기까지. 광고가 유효 노출로 잡히려면
+// 화면에 잠깐은 떠 있어야 해서 둔 최소한의 시간이다. 길게 잡으면 노출이 느는 게 아니라
+// 이탈이 늘어 판수(=노출 수)가 줄어든다. 버튼은 자리에 둔 채 잠시 못 누르게만 한다.
+// 반드시 AdFit 의 FAIL_MS(광고 미노출 시 빈 자리를 접는 시간)보다 길게 — 자리가 접히며
+// 버튼이 움직이는 일이 '누를 수 있게 되기 전' 에 끝나야 잘못 누르지 않는다.
+const RETRY_DELAY_MS = 2000;
+
+const MODE_LABEL: Record<GameMode, string> = { basic: "기본", random: "도전" };
+
+let visitLogged = false; // StrictMode 개발 모드의 두 번 마운트에서 방문이 두 번 찍히지 않게
+
 export default function App() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const gameRef = useRef<Game | null>(null);
@@ -31,9 +43,14 @@ export default function App() {
   const [submitState, setSubmitState] = useState<SubmitState>("idle");
   const [result, setResult] = useState<SubmitResult | null>(null);
   const [showRanking, setShowRanking] = useState(false);
+  // 랭킹 창에서 보고 있는 모드(게임 중인 모드와 별개로 둘러볼 수 있다)
+  const [rankMode, setRankMode] = useState<GameMode>("random");
   const [shareCopied, setShareCopied] = useState(false);
   const homeTopRef = useRef<HTMLDivElement>(null);
   const homeBottomRef = useRef<HTMLDivElement>(null);
+  const [retryLeft, setRetryLeft] = useState(0); // '다시 하기' 까지 남은 초 (0 이면 바로 가능)
+  const retryUntil = useRef(0);
+  const runStartedAt = useRef(0); // 한 판 길이 계산용
 
   // 세로 화면 홈: 제목 블록 아래 ~ 버튼 블록 위 빈칸을 엔진에 알려 데모 탑을 그 사이에 세운다.
   // offsetTop 을 쓰는 건 등장 애니메이션(transform)에 흔들리지 않는 레이아웃 위치가 필요해서.
@@ -47,6 +64,10 @@ export default function App() {
 
   useEffect(() => {
     if (!canvasRef.current) return;
+    if (!visitLogged) {
+      visitLogged = true;
+      logEvent("visit");
+    }
     const g = new Game(canvasRef.current, setHud);
     gameRef.current = g;
     syncHomeFrame();
@@ -69,19 +90,45 @@ export default function App() {
     if (hud.phase === "gameover" || hud.phase === "clear") {
       setSubmitState("idle");
       setResult(null);
-      const t = setTimeout(() => setShowModal(true), hud.phase === "clear" ? 400 : 850);
+      logEvent("end", {
+        mode: hud.mode,
+        heightCm: toHeightCm(hud.peakM),
+        blocks: hud.peakBlocks,
+        durationMs: runStartedAt.current ? Date.now() - runStartedAt.current : undefined,
+      });
+      const t = setTimeout(() => {
+        setShowModal(true);
+        retryUntil.current = Date.now() + RETRY_DELAY_MS;
+        setRetryLeft(Math.ceil(RETRY_DELAY_MS / 1000));
+      }, hud.phase === "clear" ? 400 : 850);
       return () => clearTimeout(t);
     }
     setShowModal(false);
     setCard(null);
+    setRetryLeft(0);
   }, [hud?.phase]);
 
-  const start = useCallback(() => gameRef.current?.start(), []);
+  // 남은 시간 표시 — 0 이 되면 인터벌도 멈춘다.
+  useEffect(() => {
+    if (retryLeft <= 0) return;
+    const t = setInterval(() => {
+      const left = Math.ceil((retryUntil.current - Date.now()) / 1000);
+      setRetryLeft(left > 0 ? left : 0);
+    }, 150);
+    return () => clearInterval(t);
+  }, [retryLeft]);
+
+  const start = useCallback((mode: GameMode) => {
+    runStartedAt.current = Date.now();
+    logEvent("start", { mode });
+    gameRef.current?.start(mode);
+  }, []);
   const reset = useCallback(() => {
     setCard(null);
     setShowModal(false);
     setResult(null);
     setSubmitState("idle");
+    setRetryLeft(0);
     gameRef.current?.reset();
   }, []);
   const home = useCallback(() => {
@@ -89,6 +136,7 @@ export default function App() {
     setShowModal(false);
     setResult(null);
     setSubmitState("idle");
+    setRetryLeft(0);
     gameRef.current?.goHome();
   }, []);
 
@@ -102,9 +150,11 @@ export default function App() {
         playerName: trimmed || "익명",
         heightCm: toHeightCm(hud.peakM),
         blocks: hud.peakBlocks,
+        mode: hud.mode,
         image: gameRef.current?.captureScoreCard(),
       });
       savePlayerName(trimmed);
+      logEvent("submit", { mode: hud.mode, heightCm: toHeightCm(hud.peakM), blocks: hud.peakBlocks });
       setResult(r);
       setSubmitState("done");
     } catch {
@@ -115,6 +165,7 @@ export default function App() {
   // 게임 링크 + 내 점수를 공유. Web Share 우선, 없으면 클립보드 복사.
   const shareLink = useCallback(async () => {
     if (!hud) return;
+    logEvent("share", { mode: hud.mode });
     const text = `높이 높이에서 ${formatHeight(hud.peakM)}m · ${hud.peakBlocks}블록 쌓았어요! 🧱 도전해보세요`;
     const url = window.location.origin;
     const nav = navigator as Navigator & { share?: (d: unknown) => Promise<void> };
@@ -170,6 +221,8 @@ export default function App() {
   }, [card]);
 
   const phase = hud?.phase ?? "home";
+  // 모드별 내 최고 기록 — 홈에서 버튼마다 보여준다. hud.bestM 은 지금 고른 모드 것뿐이라 직접 읽는다.
+  const bestOf = (m: GameMode) => loadRecord(m);
 
   // 홈에 들어올 때마다, 그리고 글꼴 로드·최고기록 배지 등장으로 블록 크기가 바뀔 때마다 다시 잰다.
   useLayoutEffect(() => {
@@ -251,7 +304,7 @@ export default function App() {
               />
             </div>
             <div className="mx-auto mt-1 max-w-md text-center text-[11px] font-medium text-white/45">
-              최고 {formatHeight(hud.bestM)}m · {hud.bestBlocks}블록
+              {MODE_LABEL[hud.mode]} · 최고 {formatHeight(hud.bestM)}m · {hud.bestBlocks}블록
             </div>
           </div>
 
@@ -310,31 +363,39 @@ export default function App() {
                 HIGHER HIGHER
               </p>
               <p className="mx-auto mt-5 max-w-sm text-base font-medium leading-relaxed text-white/75">
-                무너지기 전까지, 더 높이. 랜덤 블록을 하나씩 쌓아 올려
+                무너지기 전까지, 더 높이. 블록을 하나씩 쌓아 올려
                 <br className="hidden sm:block" /> 최고 높이 기록에 도전하세요.
               </p>
             </div>
 
             <div ref={homeBottomRef} className="mt-8 flex flex-col items-center">
-              <button
-                onClick={start}
-                className="pointer-events-auto animate-[rise_0.9s_ease-out] rounded-2xl bg-gradient-to-r from-[#FF6B9D] to-[#FFD166] px-12 py-4 text-xl font-extrabold text-[#2a0f28] shadow-xl shadow-pink-500/25 transition hover:brightness-110 active:scale-95"
-              >
-                시작하기
-              </button>
+              {/* 모드 선택 — 기본은 정사각형만 나와서 쉽고, 도전은 기존처럼 랜덤 블록이 나온다.
+                  각 버튼 아래에 그 모드의 내 최고 기록을 보여준다(기록·순위표 모두 모드별). */}
+              <div className="pointer-events-auto flex w-full max-w-xs animate-[rise_0.9s_ease-out] flex-col gap-2.5">
+                <ModeButton
+                  primary
+                  title="기본 모드"
+                  desc="정사각형만 · 쉬움"
+                  best={bestOf("basic")}
+                  onClick={() => start("basic")}
+                />
+                <ModeButton
+                  title="도전 모드"
+                  desc="랜덤 블록"
+                  best={bestOf("random")}
+                  onClick={() => start("random")}
+                />
+              </div>
 
               <button
-                onClick={() => setShowRanking(true)}
+                onClick={() => {
+                  logEvent("rank");
+                  setShowRanking(true);
+                }}
                 className="pointer-events-auto mt-3 animate-[rise_1s_ease-out] rounded-2xl bg-white/10 px-6 py-2.5 text-sm font-bold text-white/80 backdrop-blur-md transition hover:bg-white/20 active:scale-95"
               >
                 🏆 글로벌 랭킹
               </button>
-
-              {hud && hud.bestM > 0 && (
-                <div className="pointer-events-none mt-5 rounded-2xl bg-black/25 px-5 py-2 text-sm font-semibold text-white/70 backdrop-blur-md">
-                  🏆 최고 기록 {formatHeight(hud.bestM)}m · {hud.bestBlocks}블록
-                </div>
-              )}
             </div>
           </div>
         </div>
@@ -360,7 +421,7 @@ export default function App() {
               <Stat label="블록" value={`${hud.peakBlocks}/${hud.total}`} />
             </div>
             <div className="mt-3 rounded-2xl bg-white/5 py-2 text-sm font-semibold text-white/70">
-              🏆 최고 {formatHeight(hud.bestM)}m · {hud.bestBlocks}블록
+              🏆 {MODE_LABEL[hud.mode]} 최고 {formatHeight(hud.bestM)}m · {hud.bestBlocks}블록
               {hud.peakM >= hud.bestM - 0.05 && hud.peakM > 0 && (
                 <span className="ml-2 rounded-full bg-[#FFD166] px-2 py-0.5 text-[11px] font-bold text-[#3a2a00]">
                   신기록!
@@ -393,6 +454,7 @@ export default function App() {
                       preload={result.top}
                       highlightName={name.trim() || "익명"}
                       limit={10}
+                      mode={hud.mode}
                     />
                   </>
                 ) : (
@@ -435,11 +497,14 @@ export default function App() {
             )}
 
             <div className="mt-5 grid grid-cols-2 gap-3">
+              {/* 결과 창이 뜨자마자 누르면 광고가 보일 새도 없이 사라진다. 버튼은 자리에 두고
+                  잠깐만 못 누르게 한다 — 늦게 나타나게 하면 그 자리를 누르려다 광고가 눌린다. */}
               <button
                 onClick={reset}
-                className="rounded-2xl bg-gradient-to-r from-[#FF6B9D] to-[#FFD166] py-3 font-extrabold text-[#2a0f28] transition hover:brightness-110 active:scale-95"
+                disabled={retryLeft > 0}
+                className="rounded-2xl bg-gradient-to-r from-[#FF6B9D] to-[#FFD166] py-3 font-extrabold text-[#2a0f28] tabular-nums transition hover:brightness-110 active:scale-95 disabled:cursor-default disabled:opacity-50 disabled:hover:brightness-100 disabled:active:scale-100"
               >
-                다시 하기
+                {retryLeft > 0 ? `다시 하기 ${retryLeft}` : "다시 하기"}
               </button>
               <button
                 onClick={shareLink}
@@ -482,11 +547,65 @@ export default function App() {
                 ✕
               </button>
             </div>
-            <LeaderboardList limit={20} searchable highlightName={name.trim() || undefined} />
+            <div className="mb-3 flex gap-1 rounded-xl bg-white/5 p-1">
+              {(["basic", "random"] as GameMode[]).map((m) => (
+                <button
+                  key={m}
+                  onClick={() => setRankMode(m)}
+                  className={`flex-1 rounded-lg py-1.5 text-xs font-bold transition ${
+                    rankMode === m ? "bg-white/15 text-white" : "text-white/50 hover:text-white/80"
+                  }`}
+                >
+                  {MODE_LABEL[m]}
+                </button>
+              ))}
+            </div>
+            <LeaderboardList
+              limit={20}
+              searchable
+              mode={rankMode}
+              highlightName={name.trim() || undefined}
+            />
           </div>
         </div>
       )}
     </div>
+  );
+}
+
+/** 홈의 모드 선택 버튼 — 제목·설명과 그 모드의 내 최고 기록. */
+function ModeButton({
+  title,
+  desc,
+  best,
+  onClick,
+  primary = false,
+}: {
+  title: string;
+  desc: string;
+  best: { heightM: number; blocks: number };
+  onClick: () => void;
+  primary?: boolean;
+}) {
+  return (
+    <button
+      onClick={onClick}
+      className={`w-full rounded-2xl px-5 py-3 text-left transition active:scale-[0.98] ${
+        primary
+          ? "bg-gradient-to-r from-[#FF6B9D] to-[#FFD166] text-[#2a0f28] shadow-xl shadow-pink-500/25 hover:brightness-110"
+          : "bg-white/12 text-white backdrop-blur-md hover:bg-white/20"
+      }`}
+    >
+      <div className="flex items-baseline justify-between gap-2">
+        <span className="text-lg font-extrabold">{title}</span>
+        <span className={`text-[11px] font-semibold ${primary ? "text-[#2a0f28]/70" : "text-white/55"}`}>
+          {desc}
+        </span>
+      </div>
+      <div className={`mt-0.5 text-[11px] font-semibold ${primary ? "text-[#2a0f28]/65" : "text-white/45"}`}>
+        {best.heightM > 0 ? `내 최고 ${formatHeight(best.heightM)}m · ${best.blocks}블록` : "아직 기록 없음"}
+      </div>
+    </button>
   );
 }
 

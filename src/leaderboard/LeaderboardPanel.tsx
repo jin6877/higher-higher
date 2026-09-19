@@ -6,6 +6,7 @@ import {
   towerImageUrl,
   type ScoreEntry,
 } from "./api";
+import type { GameMode } from "../game/types";
 
 /**
  * Top N 랭킹 리스트. preload 가 있으면(제출 직후 받은 Top N) 그걸 그대로 그리고,
@@ -20,11 +21,14 @@ export function LeaderboardList({
   highlightName,
   limit = 10,
   searchable = false,
+  mode = "random",
 }: {
   preload?: ScoreEntry[];
   highlightName?: string;
   limit?: number;
   searchable?: boolean;
+  /** 순위표는 모드별로 따로다. 모드를 바꾸면 목록·검색 모두 그 모드로 다시 불러온다. */
+  mode?: GameMode;
 }) {
   const [rows, setRows] = useState<ScoreEntry[] | null>(preload ?? null);
   const [err, setErr] = useState(false);
@@ -33,7 +37,7 @@ export function LeaderboardList({
   const [query, setQuery] = useState("");
   // 결과를 "어떤 검색어의 결과인지"와 함께 들고 있는다. 그래야 검색 중 상태를 따로
   // 저장하지 않고 파생시킬 수 있고, 타이핑 중에 이전 검색어의 결과가 비치지 않는다.
-  const [results, setResults] = useState<{ q: string; rows: ScoreEntry[] } | null>(null);
+  const [results, setResults] = useState<{ q: string; mode: GameMode; rows: ScoreEntry[] } | null>(null);
 
   useEffect(() => {
     if (preload) {
@@ -41,13 +45,14 @@ export function LeaderboardList({
       return;
     }
     let alive = true;
-    fetchLeaderboard(limit)
+    setErr(false);
+    fetchLeaderboard(limit, mode)
       .then((r) => alive && setRows(r))
       .catch(() => alive && setErr(true));
     return () => {
       alive = false;
     };
-  }, [preload, limit]);
+  }, [preload, limit, mode]);
 
   // 입력이 멈춘 뒤(300ms) 검색. 검색어를 비우면 다시 Top N 목록으로 돌아간다.
   useEffect(() => {
@@ -55,19 +60,19 @@ export function LeaderboardList({
     if (!q) return;
     let alive = true;
     const t = setTimeout(() => {
-      searchScores(q, 20)
-        .then((r) => alive && setResults({ q, rows: r }))
-        .catch(() => alive && setResults({ q, rows: [] }));
+      searchScores(q, 20, mode)
+        .then((r) => alive && setResults({ q, mode, rows: r }))
+        .catch(() => alive && setResults({ q, mode, rows: [] }));
     }, 300);
     return () => {
       alive = false;
       clearTimeout(t);
     };
-  }, [query]);
+  }, [query, mode]);
 
   const q = query.trim();
   const isSearch = q.length > 0;
-  const hits = results?.q === q ? results.rows : null; // 현재 검색어의 결과만 유효
+  const hits = results?.q === q && results.mode === mode ? results.rows : null; // 현재 검색어·모드의 결과만 유효
   const searching = isSearch && hits === null;
   // 미니 타워 비율은 어느 모드에서든 전체 1위 높이를 100% 기준으로 삼아야 비교가 된다.
   const maxCm = rows?.length ? rows[0].heightCm : (hits?.[0]?.heightCm ?? 0);

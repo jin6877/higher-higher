@@ -50,8 +50,16 @@ export interface BlockSpec {
 
 export type Phase = "home" | "playing" | "gameover" | "clear";
 
+/**
+ * 게임 모드. 순위표도 이 값으로 나뉜다(서버 validate.ts 와 같은 문자열이어야 한다).
+ * basic  — 늘 같은 정사각형만 나온다. 모양·크기가 일정해서 쌓기 쉽다.
+ * random — 블록이 쌓일수록 모양이 다양해진다(기존 모드).
+ */
+export type GameMode = "basic" | "random";
+
 export interface HudState {
   phase: Phase;
+  mode: GameMode;
   placed: number; // number of blocks successfully placed (settled)
   total: number; // max blocks (100)
   heightM: number; // current tower height in meters

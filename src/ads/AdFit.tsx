@@ -11,7 +11,8 @@ import { useEffect, useRef, useState } from "react";
  * 자리(height)는 미리 잡아 둔다. 광고가 늦게 떠서 아래 버튼을 밀어내면 그 순간 잘못 눌리기 쉽다.
  */
 const SCRIPT_SRC = "//t1.kakaocdn.net/kas/static/ba.min.js";
-// 광고가 안 채워졌을 때 빈 자리를 접기까지의 시간. 짧게 잡아 사용자가 버튼을 누르기 전에 끝낸다.
+// 광고가 안 채워졌을 때 빈 자리를 접기까지의 시간. 자리가 접히면 아래 내용이 위로 올라오므로,
+// 버튼을 누를 수 있게 되는 시점(App 의 RETRY_DELAY_MS = 2초)보다 반드시 먼저 끝나야 한다.
 const FAIL_MS = 1500;
 
 export function AdFit({

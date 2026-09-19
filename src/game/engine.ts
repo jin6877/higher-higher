@@ -39,7 +39,7 @@ import {
 import { mulberry32, randRange, type Rng } from "./rng";
 import { makeBlockSpec } from "./shapes";
 import * as SFX from "./audio";
-import type { BlockSpec, HudState, Phase } from "./types";
+import type { BlockSpec, GameMode, HudState, Phase } from "./types";
 
 const { Engine, Bodies, Body, Composite, Events } = Matter;
 
@@ -110,6 +110,8 @@ export class Game {
   private rng: Rng;
 
   private phase: Phase = "home";
+  // 기본(정사각형만) / 도전(랜덤). 기록·순위표가 모드별로 나뉜다.
+  private mode: GameMode = "random";
   private cleared = false;
   // Snapshot of the score card taken at the last successful placement, so a
   // collapsed/tumbling tower is never what gets shared or submitted to ranking.
@@ -269,7 +271,9 @@ export class Game {
 
   // ---------- game flow ----------
 
-  start() {
+  start(mode: GameMode = this.mode) {
+    this.mode = mode;
+    this.record = loadRecord(mode);
     SFX.primeAudio();
     SFX.startBgm(); // 다시 하기(reset)도 여기로 오므로 매 판 도입부부터
     this.clearBlocks();
@@ -289,19 +293,19 @@ export class Game {
   }
 
   reset() {
-    this.record = loadRecord();
+    this.record = loadRecord(this.mode);
     this.start();
   }
 
   goHome() {
     SFX.stopBgm();
-    this.record = loadRecord();
+    this.record = loadRecord(this.mode);
     this.buildDemo();
   }
 
   /** create a fresh spec for a given placement index, tracking colour variety */
   private makeSpec(index: number): BlockSpec {
-    const spec = makeBlockSpec(this.idCounter++, index, this.rng, this.lastColor);
+    const spec = makeBlockSpec(this.idCounter++, index, this.rng, this.lastColor, this.mode);
     this.lastColor = spec.color;
     return spec;
   }
@@ -393,7 +397,7 @@ export class Game {
     this.cleared = true;
     this.updatePeak();
     // finalize on the PEAK reached, never a value that dipped during the run
-    this.record = saveRecord(this.peakHeightM, this.peakBlocks);
+    this.record = saveRecord(this.peakHeightM, this.peakBlocks, this.mode);
     SFX.stopBgm(); // 완주 효과음이 묻히지 않게
     SFX.sfxClear();
     this.confetti();
@@ -407,7 +411,7 @@ export class Game {
     this.awaiting = false;
     // score the run by the peak height it reached BEFORE toppling — the tower
     // is already tumbling (blocks falling away), so the live height is lower now.
-    this.record = saveRecord(this.peakHeightM, this.peakBlocks);
+    this.record = saveRecord(this.peakHeightM, this.peakBlocks, this.mode);
     this.cam.shakeMag = 14;
     SFX.stopBgm(); // 무너지는 효과음이 묻히지 않게
     SFX.sfxCollapse();
@@ -1248,6 +1252,7 @@ export class Game {
   private emit(force: boolean) {
     const hud: HudState = {
       phase: this.phase,
+      mode: this.mode,
       placed: this.placedCount,
       total: TOTAL_BLOCKS,
       heightM: this.currentHeightM(),
@@ -1468,13 +1473,14 @@ export class Game {
 
   private exposeTestHooks() {
     (window as unknown as { __hh: unknown }).__hh = {
-      start: () => this.start(),
+      start: (mode?: GameMode) => this.start(mode),
       reset: () => this.reset(),
       drop: () => this.drop(),
       setAim: (x: number) => this.setAim(x),
       rotate: (d: number) => this.rotate(d),
       state: () => ({
         phase: this.phase,
+        mode: this.mode,
         placed: this.placedCount,
         awaitingDrop: this.awaiting,
         heightM: this.currentHeightM(),

@@ -3,6 +3,7 @@ import path from "node:path";
 import fs from "node:fs";
 import {
   DATA_DIR,
+  insertEvent,
   insertScore,
   rankOf,
   searchScores,
@@ -11,7 +12,7 @@ import {
   totalCount,
   type ScoreRow,
 } from "./db";
-import { validateScore } from "./validate";
+import { sanitizeMode, validateEvent, validateScore, type GameMode } from "./validate";
 
 const app = express();
 // nginx 뒤에 있으므로 X-Forwarded-For 를 신뢰해 req.ip 를 실제 클라이언트 IP 로.
@@ -69,9 +70,12 @@ function pruneTowerImages(): void {
 // ── best-effort IP Rate Limit (인메모리) — 스크립트 폭주 방지. 랭킹은 캐주얼이라 완만하게. ──
 const WINDOW_MS = 60_000;
 const MAX_PER_WINDOW = 20;
-const hits = new Map<string, { count: number; resetAt: number }>();
+// 점수 제출과 이용 로그는 빈도가 달라 버킷을 나눈다 — 로그가 제출 한도를 잡아먹으면 안 된다.
+const buckets = new Map<string, Map<string, { count: number; resetAt: number }>>();
 
-function rateLimited(ip: string): boolean {
+function rateLimited(ip: string, bucket = "score", max = MAX_PER_WINDOW): boolean {
+  let hits = buckets.get(bucket);
+  if (!hits) buckets.set(bucket, (hits = new Map()));
   const now = Date.now();
   const cur = hits.get(ip);
   if (!cur || now > cur.resetAt) {
@@ -79,12 +83,14 @@ function rateLimited(ip: string): boolean {
     return false;
   }
   cur.count += 1;
-  return cur.count > MAX_PER_WINDOW;
+  return cur.count > max;
 }
 setInterval(() => {
   const now = Date.now();
-  for (const [ip, v] of hits) {
-    if (now > v.resetAt) hits.delete(ip);
+  for (const hits of buckets.values()) {
+    for (const [ip, v] of hits) {
+      if (now > v.resetAt) hits.delete(ip);
+    }
   }
 }, WINDOW_MS).unref();
 
@@ -110,24 +116,31 @@ app.get("/healthz", (_req, res) => {
   res.type("text/plain").send("ok");
 });
 
-// Top N 랭킹 (기본 20, 최대 100).
+/** 모드는 순위표를 가르는 축 — 없거나 이상하면 기존 모드(도전)로 본다. */
+function modeOf(req: { query: Record<string, unknown> }): GameMode {
+  return sanitizeMode(req.query.mode);
+}
+
+// Top N 랭킹 (기본 20, 최대 100). 모드별로 따로 매긴다.
 app.get("/api/scores", (req, res) => {
   const raw = parseInt(String(req.query.limit ?? "20"), 10);
   const limit = Math.min(Math.max(Number.isFinite(raw) ? raw : 20, 1), 100);
-  const top = topScores(limit).map((r, i) => toEntry(r, i + 1));
-  res.json(ok({ top }));
+  const mode = modeOf(req);
+  const top = topScores(limit, mode).map((r, i) => toEntry(r, i + 1));
+  res.json(ok({ top, mode }));
 });
 
 // 닉네임 검색 — Top 20 밖의 기록은 이걸로만 찾을 수 있다.
 // (":id/tower.png" 는 세그먼트 수가 달라 이 경로와 충돌하지 않는다.)
 app.get("/api/scores/search", (req, res) => {
   // 닉네임 상한(20자)과 맞춰 잘라, 긴 검색어로 스캔을 유발하는 걸 막는다.
+  const mode = modeOf(req);
   const q = String(req.query.q ?? "").trim().slice(0, 20);
-  if (!q) return res.json(ok({ results: [], totalCount: totalCount() }));
+  if (!q) return res.json(ok({ results: [], totalCount: totalCount(mode), mode }));
   const raw = parseInt(String(req.query.limit ?? "20"), 10);
   const limit = Math.min(Math.max(Number.isFinite(raw) ? raw : 20, 1), 50);
-  const results = searchScores(q, limit).map((r) => toEntry(r, r.rank));
-  res.json(ok({ results, totalCount: totalCount() }));
+  const results = searchScores(q, limit, mode).map((r) => toEntry(r, r.rank));
+  res.json(ok({ results, totalCount: totalCount(mode), mode }));
 });
 
 // 특정 기록의 탑 이미지 (PNG). 없으면 404.
@@ -148,13 +161,13 @@ app.post("/api/scores", (req, res) => {
     return res.status(429).json(fail("RATE_LIMITED", "잠시 후 다시 시도해주세요."));
   }
   const clean = validateScore(req.body);
-  const id = insertScore(clean.playerName, clean.heightCm, clean.blocks, ip || null);
+  const id = insertScore(clean.playerName, clean.heightCm, clean.blocks, ip || null, clean.mode);
   const body = (req.body ?? {}) as Record<string, unknown>;
   saveTowerImage(id, body.image);
   pruneTowerImages();
 
-  const rank = rankOf(clean.heightCm, clean.blocks);
-  const top = topScores(20).map((r, i) => toEntry(r, i + 1));
+  const rank = rankOf(clean.heightCm, clean.blocks, clean.mode);
+  const top = topScores(20, clean.mode).map((r, i) => toEntry(r, i + 1));
   const entry = {
     id,
     rank,
@@ -164,7 +177,27 @@ app.post("/api/scores", (req, res) => {
     createdAt: new Date().toISOString(),
     hasImage: hasTower(id),
   };
-  res.json(ok({ rank, totalCount: totalCount(), entry, top }));
+  res.json(ok({ rank, totalCount: totalCount(clean.mode), mode: clean.mode, entry, top }));
+});
+
+// 이용 로그 수집 — 방문/시작/종료/등록/공유. 실패해도 게임엔 영향이 없도록 항상 204 로 끝낸다.
+// 로그는 몇 판이 이뤄졌는지 세기 위한 것이라 sendBeacon 으로 던져도 되게 응답 본문을 두지 않는다.
+app.post("/api/events", (req, res) => {
+  const ip = String(req.ip ?? "");
+  if (rateLimited(ip, "event", 120)) return res.status(204).end();
+  const clean = validateEvent(req.body);
+  if (!clean) return res.status(204).end();
+  try {
+    insertEvent({
+      ...clean,
+      ua: String(req.get("user-agent") ?? "").slice(0, 200) || null,
+      referrer: String(req.get("referer") ?? "").slice(0, 200) || null,
+      ip: ip || null,
+    });
+  } catch {
+    /* 로그 실패는 무시 */
+  }
+  res.status(204).end();
 });
 
 // ── 게임 정적 파일 (빌드된 dist) + SPA 폴백 ──
