@@ -176,9 +176,9 @@ export function LeaderboardList({
 function TowerDetail({ entry, onClose }: { entry: ScoreEntry; onClose: () => void }) {
   const [failed, setFailed] = useState(false);
   return (
-    <div className="fixed inset-0 z-[60] flex items-center justify-center p-4">
+    <div className="fixed inset-0 z-[60] flex items-center justify-center px-4 pt-[max(1rem,env(safe-area-inset-top,0px))] pb-[max(1rem,env(safe-area-inset-bottom,0px))]">
       <div className="absolute inset-0 bg-black/80" onClick={onClose} />
-      <div className="pointer-events-auto relative flex max-h-[92vh] w-full max-w-xs flex-col items-center">
+      <div className="pointer-events-auto relative flex max-h-full w-full max-w-xs flex-col items-center">
         <div className="mb-2 flex w-full items-center justify-between px-1">
           <div className="min-w-0">
             <div className="truncate text-base font-black">{entry.playerName}</div>

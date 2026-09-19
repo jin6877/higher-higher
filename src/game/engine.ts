@@ -126,6 +126,10 @@ export class Game {
   private wobble = 0;
   private warnCooldown = 0;
   private miniPanelW = 0; // smoothed minimap panel width (adapts to the tower's real proportions)
+  // 노치·홈바 안전 영역(px). 캔버스는 CSS env() 를 못 읽어서 resize 때 프로브 요소로 잰다.
+  private safe = { top: 0, right: 0, bottom: 0 };
+  // 세로 화면 홈에서 제목(위)과 버튼(아래) 사이 빈칸 — App 이 실제 DOM 위치를 재서 넘겨준다.
+  private homeFrame: { top: number; bottom: number } | null = null;
 
   private W = 0;
   private H = 0;
@@ -514,15 +518,55 @@ export class Game {
   private computeCamTarget() {
     const alt = this.currentHeightM();
     const baseZoom = Math.max(0.62, Math.min(1.5, this.H / TARGET_VIEW));
-    const zoom = Math.max(0.5, Math.min(1.5, baseZoom * (1 - 0.1 * altitudeNorm(alt))));
+
+    if (this.phase === "home" && !this.isWide() && this.homeFrame) {
+      // 세로 화면 홈: 데모 탑 전체(꼭대기~받침대)를 제목과 버튼 사이 빈칸에 세운다.
+      // 가운데 서면 가운데 정렬된 설명 글과 그대로 겹친다. 받침대 바닥을 빈칸 아래에 붙여
+      // 탑이 땅에서 올라오게 하고, 넘치면 빈칸에 맞게(그리고 폭에 맞게) 줄인다.
+      const top = this.settledTopY();
+      const base = PLATFORM_TOP_Y + PLATFORM_HEIGHT;
+      const bandTop = this.homeFrame.top + 20;
+      const bandBot = this.homeFrame.bottom - 12;
+      const zoom = Math.max(
+        0.3,
+        Math.min(baseZoom, (bandBot - bandTop) / (base - top), (this.W - 48) / PLATFORM_WIDTH),
+      );
+      return { camY: base - (bandBot - this.H / 2) / zoom, zoom };
+    }
+
+    let zoom = Math.max(0.5, Math.min(1.5, baseZoom * (1 - 0.1 * altitudeNorm(alt))));
+    if (this.phase !== "home" && this.miniTiny()) {
+      // 좁은 화면: 오른쪽 탑 현황 패널 자리만큼 비워, 받침대가 패널 밑으로 들어가지 않게 살짝 줄인다.
+      const reserve = this.miniTinyPanelW() + this.miniMargin() + 4;
+      zoom = Math.min(zoom, (this.W - 2 * reserve) / PLATFORM_WIDTH);
+    }
     const focus = this.focusTopY();
     const camY = focus - (FOCUS_FRAC * this.H - this.H / 2) / zoom;
     return { camY, zoom };
   }
 
+  /** 가로로 넓은 화면 — 홈에서 탑을 오른쪽으로 비키고 글은 가운데. App.tsx 의 (max-aspect-ratio: 5/4) 와 짝. */
+  private isWide(): boolean {
+    return this.W / this.H > 1.25;
+  }
+
   private targetOffsetX(): number {
-    const wide = this.W / this.H > 1.25;
-    return this.phase === "home" && wide ? this.W * 0.2 : 0;
+    return this.phase === "home" && this.isWide() ? this.W * 0.2 : 0;
+  }
+
+  /** 세로 화면 홈에서 탑을 세울 빈칸(화면 y, px). */
+  setHomeFrame(top: number, bottom: number) {
+    this.homeFrame = { top, bottom };
+    if (this.phase === "home") this.snapCamera();
+  }
+
+  // 아래 두 값은 App.tsx 의 HUD·조작 버튼 배치와 짝이다(상단 패딩 max(16, 노치+8) + HUD 102px,
+  // 하단 패딩 max(16, 홈바) + 버튼·안내문 102px). 한쪽을 바꾸면 같이 바꿔야 패널이 가려지지 않는다.
+  private hudBottom(): number {
+    return Math.max(16, this.safe.top + 8) + 102;
+  }
+  private controlsTop(): number {
+    return this.H - Math.max(16, this.safe.bottom) - (this.phase === "playing" ? 102 : 16);
   }
 
   private snapCamera() {
@@ -678,21 +722,34 @@ export class Game {
    * panel width adapts to the tower's real aspect ratio (a short/wide stack gets
    * a wider panel, a tall stack a narrow one) but stays clamped to a responsive
    * range so it never covers the play field, HUD or buttons. A box marks the
-   * slice the main camera is currently showing. Compact/hidden on narrow screens.
+   * slice the main camera is currently showing. Compact on narrow screens (phones get a thin strip).
    */
+  // 폰처럼 좁은 화면에선 패널을 가늘게 줄여서 보여 준다(예전엔 460px 미만이면 숨겼다).
+  private miniTiny(): boolean {
+    return this.W < 460;
+  }
+  private miniMargin(): number {
+    return (this.miniTiny() ? 6 : 12) + this.safe.right;
+  }
+  private miniTinyPanelW(): number {
+    return Math.min(40, this.W * 0.08) + 8; // 안쪽 폭 상한 + 좌우 패딩 4px×2
+  }
+
   private drawMinimap() {
     if (this.phase === "home") return;
-    if (this.W < 460) return; // too narrow (mobile) — hide entirely
     const ctx = this.ctx;
+    const tiny = this.miniTiny();
 
-    // --- panel vertical extent (clears top HUD and bottom controls) ---
-    const margin = 12;
-    const pTop = 118;
-    const pBottom = this.H - (this.phase === "playing" ? 118 : 32);
+    // --- panel vertical extent (clears top HUD and bottom controls, notch-aware) ---
+    const margin = this.miniMargin();
+    // 좁은 화면 게임 중엔 🔊 버튼이 HUD 바로 아래 오른쪽으로 내려오므로(App.tsx) 그만큼 더 비운다.
+    const pTop = this.hudBottom() + (this.phase === "playing" && this.W < 560 ? 48 : 0);
+    const pBottom = this.controlsTop();
     const pH = pBottom - pTop;
     if (pH < 150) return; // not enough vertical room -> skip
-    const padX = 8;
-    const padY = 10;
+    const padX = tiny ? 4 : 8;
+    const padY = tiny ? 6 : 10;
+    const radius = tiny ? 8 : 12;
     const innerH = pH - padY * 2;
 
     // --- world bounding box of the WHOLE tower (pedestal base → highest tip) ---
@@ -722,8 +779,10 @@ export class Game {
     //     clamp to a responsive range that keeps the panel out of the way. ---
     const compact = this.W < 760;
     const desiredInnerW = towerW * (innerH / towerH);
-    const minInnerW = compact ? 28 : 42;
-    const maxInnerW = Math.min(compact ? 84 : 140, this.W * (compact ? 0.24 : 0.2));
+    const minInnerW = tiny ? 16 : compact ? 28 : 42;
+    const maxInnerW = tiny
+      ? this.miniTinyPanelW() - padX * 2
+      : Math.min(compact ? 84 : 140, this.W * (compact ? 0.24 : 0.2));
     const targetPanelW = Math.max(minInnerW, Math.min(maxInnerW, desiredInnerW)) + padX * 2;
     // smooth width changes so adding blocks doesn't make the panel jump around
     this.miniPanelW = this.miniPanelW > 0 ? this.miniPanelW + (targetPanelW - this.miniPanelW) * 0.16 : targetPanelW;
@@ -744,14 +803,14 @@ export class Game {
 
     ctx.save();
     // panel background
-    roundRect(ctx, px, pTop, panelW, pH, 12);
+    roundRect(ctx, px, pTop, panelW, pH, radius);
     ctx.fillStyle = "rgba(9,13,32,0.42)";
     ctx.fill();
     ctx.strokeStyle = "rgba(255,255,255,0.16)";
     ctx.lineWidth = 1;
     ctx.stroke();
     // keep every mark inside the rounded panel
-    roundRect(ctx, px, pTop, panelW, pH, 12);
+    roundRect(ctx, px, pTop, panelW, pH, radius);
     ctx.clip();
 
     // camera viewport slice (what the main view is currently showing)
@@ -1276,6 +1335,7 @@ export class Game {
     this.canvas.style.width = w + "px";
     this.canvas.style.height = h + "px";
     this.ctx.setTransform(this.dpr, 0, 0, this.dpr, 0, 0);
+    this.safe = readSafeArea();
   }
 
   // ---------- score card ----------
@@ -1457,6 +1517,23 @@ export class Game {
     Composite.clear(this.world, false, true);
     Engine.clear(this.engine);
   }
+}
+
+/** 노치·홈바 안전 영역(px). env() 는 CSS 에서만 읽히므로 보이지 않는 요소에 패딩으로 걸어 잰다. */
+function readSafeArea(): { top: number; right: number; bottom: number } {
+  const p = document.createElement("div");
+  p.style.cssText =
+    "position:fixed;visibility:hidden;pointer-events:none;" +
+    "padding:env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) 0";
+  document.body.appendChild(p);
+  const cs = getComputedStyle(p);
+  const r = {
+    top: parseFloat(cs.paddingTop) || 0,
+    right: parseFloat(cs.paddingRight) || 0,
+    bottom: parseFloat(cs.paddingBottom) || 0,
+  };
+  p.remove();
+  return r;
 }
 
 // ---------- small drawing helpers ----------
