@@ -34,11 +34,16 @@ export function StatsPage() {
   const [to, setTo] = useState(kstDay(0));
 
   useEffect(() => {
-    setErr(false);
+    // 상태 변경은 전부 응답이 온 뒤에 한다. 기간을 바꾸는 동안에는 이전 데이터를 그대로 두어
+    // 화면이 한 번 비었다가 다시 차는 깜빡임이 없다.
     let alive = true;
     fetch(`${API_BASE}/stats?from=${from}&to=${to}`, { headers: { Accept: "application/json" } })
       .then((r) => (r.ok ? r.json() : Promise.reject(new Error(String(r.status)))))
-      .then((b) => alive && setData(b.data as Stats))
+      .then((b) => {
+        if (!alive) return;
+        setData(b.data as Stats);
+        setErr(false);
+      })
       .catch(() => alive && setErr(true));
     return () => {
       alive = false;
