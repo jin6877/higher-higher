@@ -11,6 +11,7 @@ const VISITOR = "#d55181";
 const GAMES = "#c98500";
 
 interface Stats {
+  range: { from: string; to: string; bucket: "day" | "week" };
   daily: { day: string; visitors: number; starts: number; ends: number; submits: number }[];
   byMode: { mode: string; games: number; avgHeightM: number; avgBlocks: number; avgSec: number; submits: number }[];
   funnel: { visits: number; starts: number; ends: number; submits: number; shares: number };
@@ -20,23 +21,82 @@ interface Stats {
 const MODE_LABEL: Record<string, string> = { basic: "기본", random: "도전" };
 const API_BASE = (import.meta.env.VITE_API_BASE ?? "/api").replace(/\/+$/, "");
 
+/** 한국 시간 기준 오늘/과거 날짜 (YYYY-MM-DD) — 서버와 같은 기준을 쓴다. */
+const kstDay = (back = 0) =>
+  new Date(Date.now() + 9 * 3600_000 - back * 86_400_000).toISOString().slice(0, 10);
+const PRESETS: [string, number][] = [["7일", 7], ["14일", 14], ["30일", 30], ["90일", 90], ["1년", 366]];
+
 export function StatsPage() {
   const [data, setData] = useState<Stats | null>(null);
   const [err, setErr] = useState(false);
   const [asTable, setAsTable] = useState(false);
+  const [from, setFrom] = useState(kstDay(13));
+  const [to, setTo] = useState(kstDay(0));
 
   useEffect(() => {
-    fetch(`${API_BASE}/stats`, { headers: { Accept: "application/json" } })
+    setErr(false);
+    let alive = true;
+    fetch(`${API_BASE}/stats?from=${from}&to=${to}`, { headers: { Accept: "application/json" } })
       .then((r) => (r.ok ? r.json() : Promise.reject(new Error(String(r.status)))))
-      .then((b) => setData(b.data as Stats))
-      .catch(() => setErr(true));
-  }, []);
+      .then((b) => alive && setData(b.data as Stats))
+      .catch(() => alive && setErr(true));
+    return () => {
+      alive = false;
+    };
+  }, [from, to]);
 
-  if (err) {
-    return <Shell><p className="py-10 text-center text-white/50">통계를 불러오지 못했어요</p></Shell>;
-  }
-  if (!data) {
-    return <Shell><p className="py-10 text-center text-white/40">불러오는 중…</p></Shell>;
+  // 기간 선택 — 화면 맨 위 한 줄. 빠른 선택과 직접 지정 둘 다 둔다.
+  const picker = (
+    <div className="mb-4 rounded-2xl bg-white/[0.06] p-3">
+      <div className="flex flex-wrap gap-1.5">
+        {PRESETS.map(([label, n]) => {
+          const active = from === kstDay(n - 1) && to === kstDay(0);
+          return (
+            <button
+              key={label}
+              onClick={() => {
+                setFrom(kstDay(n - 1));
+                setTo(kstDay(0));
+              }}
+              className={`rounded-lg px-2.5 py-1 text-[11px] font-bold transition ${
+                active ? "bg-white/20 text-white" : "bg-white/5 text-white/55 hover:text-white/85"
+              }`}
+            >
+              {label}
+            </button>
+          );
+        })}
+      </div>
+      <div className="mt-2 flex items-center gap-2 text-[11px] font-semibold text-white/50">
+        <input
+          type="date"
+          value={from}
+          max={to}
+          onChange={(e) => e.target.value && setFrom(e.target.value)}
+          className="rounded-lg bg-white/10 px-2 py-1 text-white [color-scheme:dark]"
+        />
+        <span>~</span>
+        <input
+          type="date"
+          value={to}
+          min={from}
+          max={kstDay(0)}
+          onChange={(e) => e.target.value && setTo(e.target.value)}
+          className="rounded-lg bg-white/10 px-2 py-1 text-white [color-scheme:dark]"
+        />
+      </div>
+    </div>
+  );
+
+  if (err || !data) {
+    return (
+      <Shell>
+        {picker}
+        <p className="py-10 text-center text-white/40">
+          {err ? "통계를 불러오지 못했어요" : "불러오는 중…"}
+        </p>
+      </Shell>
+    );
   }
 
   const { daily, byMode, funnel, totals } = data;
@@ -44,18 +104,21 @@ export function StatsPage() {
   const last = daily[daily.length - 1];
   const funnelMax = Math.max(1, ...Object.values(funnel));
 
+  const weekly = data.range.bucket === "week";
+
   return (
     <Shell>
+      {picker}
       {/* 요약 — 하나짜리 숫자는 차트로 그릴 게 아니라 그대로 크게 보여준다 */}
       <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-4">
         <Tile label="오늘 방문자" value={totals.todayVisitors} />
         <Tile label="오늘 판수" value={totals.todayGames} />
-        <Tile label="세션당 판수" value={totals.gamesPerSession} hint="한 번 들어와 평균 몇 판" />
+        <Tile label="세션당 판수" value={totals.gamesPerSession} hint="기간 내 · 방문 1회당" />
         <Tile label="등록된 기록" value={totals.scores} />
       </div>
 
       <Section
-        title="최근 14일"
+        title={weekly ? "주별" : "일별"}
         right={
           <button
             onClick={() => setAsTable((v) => !v)}
@@ -65,6 +128,11 @@ export function StatsPage() {
           </button>
         }
       >
+        {weekly && (
+          <p className="mb-2 text-[11px] font-medium text-white/40">
+            기간이 길어 주 단위로 묶었어요 (각 주의 월요일 날짜)
+          </p>
+        )}
         <div className="mb-3 flex gap-4 text-[11px] font-semibold text-white/60">
           <Legend color={VISITOR} label="방문자" />
           <Legend color={GAMES} label="판수" />
@@ -74,7 +142,7 @@ export function StatsPage() {
           <p className="py-8 text-center text-sm text-white/40">아직 기록이 없어요</p>
         ) : asTable ? (
           <Table
-            head={["날짜", "방문자", "시작", "완료", "등록"]}
+            head={[weekly ? "주 시작" : "날짜", "방문자", "시작", "완료", "등록"]}
             rows={daily.map((d) => [d.day.slice(5), d.visitors, d.starts, d.ends, d.submits])}
           />
         ) : (
@@ -105,7 +173,7 @@ export function StatsPage() {
         )}
       </Section>
 
-      <Section title="단계별 횟수 (전체 기간)">
+      <Section title="단계별 횟수">
         {/* 같은 단위(횟수)라 한 축의 가로 막대로 비교한다. 한 번 방문해 여러 판을 하므로
             시작·종료가 방문보다 클 수 있다 — 기준은 방문 수가 아니라 가장 큰 값이다. */}
         <div className="space-y-2">
@@ -134,7 +202,7 @@ export function StatsPage() {
       </Section>
 
       <Section title="모드별">
-        {/* 판수·높이·시간은 단위가 달라 한 그래프에 겹치지 않고 표로 둔다 */}
+        {/* 판수·높이·시간은 단위가 달라 한 그래프에 겹치지 않고 표로 둔다. 모두 선택한 기간 기준. */}
         {byMode.length === 0 ? (
           <p className="py-6 text-center text-sm text-white/40">아직 기록이 없어요</p>
         ) : (
@@ -153,7 +221,7 @@ export function StatsPage() {
       </Section>
 
       <p className="mt-6 text-center text-[11px] text-white/30">
-        날짜는 한국 시간 기준 · <a href="/" className="underline hover:text-white/60">게임으로</a>
+        {data.range.from} ~ {data.range.to} · 한국 시간 기준 · <a href="/" className="underline hover:text-white/60">게임으로</a>
       </p>
     </Shell>
   );

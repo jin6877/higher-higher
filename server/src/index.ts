@@ -202,8 +202,24 @@ app.post("/api/events", (req, res) => {
 });
 
 // 이용 통계 — /stats 페이지가 쓴다. 집계값만 내보내고 개별 로그(IP·UA·세션)는 나가지 않는다.
-app.get("/api/stats", (_req, res) => {
-  res.json(ok(usageStats()));
+app.get("/api/stats", (req, res) => {
+  // from/to 는 한국 시간 기준 날짜(YYYY-MM-DD). 없으면 최근 14일.
+  const today = new Date(Date.now() + 9 * 3600_000).toISOString().slice(0, 10);
+  // 형식만 보면 2026-99-99 같은 값이 통과한다 — 실제 있는 날짜인지까지 확인한다.
+  const day = (d: unknown, fallback: string) => {
+    if (typeof d !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(d)) return fallback;
+    const parsed = new Date(d + "T00:00:00Z");
+    return !Number.isNaN(parsed.getTime()) && parsed.toISOString().slice(0, 10) === d ? d : fallback;
+  };
+  const back = (n: number) =>
+    new Date(Date.now() + 9 * 3600_000 - n * 86_400_000).toISOString().slice(0, 10);
+  let from = day(req.query.from, back(13));
+  let to = day(req.query.to, today);
+  if (to > today) to = today; // 미래 날짜는 오늘까지로
+  if (from > to) [from, to] = [to, from];
+  // 너무 긴 범위는 응답이 커지니 1년으로 제한한다.
+  if (Date.parse(to) - Date.parse(from) > 366 * 86_400_000) from = new Date(Date.parse(to) - 366 * 86_400_000).toISOString().slice(0, 10);
+  res.json(ok(usageStats(from, to)));
 });
 
 // ── 게임 정적 파일 (빌드된 dist) + SPA 폴백 ──

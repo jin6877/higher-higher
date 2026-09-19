@@ -165,6 +165,7 @@ export function searchScores(term: string, limit: number, mode: GameMode): Ranke
 // 공개 페이지(/stats)가 쓰므로 개별 행(IP·UA·세션)은 절대 내보내지 않는다. 날짜는 KST 기준.
 
 export interface UsageStats {
+  range: { from: string; to: string; bucket: "day" | "week" };
   daily: { day: string; visitors: number; starts: number; ends: number; submits: number }[];
   byMode: { mode: string; games: number; avgHeightM: number; avgBlocks: number; avgSec: number; submits: number }[];
   funnel: { visits: number; starts: number; ends: number; submits: number; shares: number };
@@ -173,19 +174,38 @@ export interface UsageStats {
 
 const KST = "+9 hours";
 
-export function usageStats(): UsageStats {
+/** 조회 기간 안의 이벤트만 — 모든 집계가 같은 기간을 본다. */
+const IN_RANGE = `date(created_at, '${KST}') BETWEEN ? AND ?`;
+
+/**
+ * 기간이 길면 하루 막대가 1px 도 안 되게 얇아진다. 35일이 넘으면 주 단위로 묶어
+ * 막대 수를 읽을 수 있는 범위로 유지한다(그 주의 월요일 날짜로 표시).
+ */
+function dayExpr(bucket: "day" | "week"): string {
+  if (bucket === "day") return `date(created_at, '${KST}')`;
+  return `date(created_at, '${KST}', '-' || ((CAST(strftime('%w', created_at, '${KST}') AS INTEGER) + 6) % 7) || ' days')`;
+}
+
+export function usageStats(from: string, to: string): UsageStats {
+  const days =
+    Math.round(
+      (Date.parse(to + "T00:00:00Z") - Date.parse(from + "T00:00:00Z")) / 86_400_000,
+    ) + 1;
+  const bucket: "day" | "week" = days > 35 ? "week" : "day";
+  const d = dayExpr(bucket);
+
   const daily = db
     .prepare(
-      `SELECT date(created_at, ?) AS day,
+      `SELECT ${d} AS day,
               COUNT(DISTINCT CASE WHEN name = 'visit' THEN session END) AS visitors,
               SUM(name = 'start')  AS starts,
               SUM(name = 'end')    AS ends,
               SUM(name = 'submit') AS submits
          FROM event
-        WHERE date(created_at, ?) BETWEEN date('now', ?, '-13 days') AND date('now', ?)
+        WHERE ${IN_RANGE}
         GROUP BY day ORDER BY day`,
     )
-    .all(KST, KST, KST, KST) as UsageStats["daily"];
+    .all(from, to) as UsageStats["daily"];
 
   const byMode = db
     .prepare(
@@ -194,42 +214,53 @@ export function usageStats(): UsageStats {
               ROUND(AVG(e.height_cm) / 100.0, 1) AS avgHeightM,
               ROUND(AVG(e.blocks), 1) AS avgBlocks,
               ROUND(AVG(e.duration_ms) / 1000.0, 1) AS avgSec,
-              (SELECT COUNT(*) FROM event s WHERE s.name = 'submit' AND s.mode = e.mode) AS submits
+              (SELECT COUNT(*) FROM event s
+                WHERE s.name = 'submit' AND s.mode = e.mode
+                  AND date(s.created_at, '${KST}') BETWEEN ? AND ?) AS submits
          FROM event e
-        WHERE e.name = 'end' AND e.mode IS NOT NULL
+        WHERE e.name = 'end' AND e.mode IS NOT NULL AND ${IN_RANGE.replace("created_at", "e.created_at")}
         GROUP BY e.mode`,
     )
-    .all() as UsageStats["byMode"];
+    .all(from, to, from, to) as UsageStats["byMode"];
 
   const count = (name: string) =>
-    (db.prepare(`SELECT COUNT(*) AS c FROM event WHERE name = ?`).get(name) as { c: number }).c;
+    (
+      db
+        .prepare(`SELECT COUNT(*) AS c FROM event WHERE name = ? AND ${IN_RANGE}`)
+        .get(name, from, to) as { c: number }
+    ).c;
 
   const todayVisitors = (
     db
       .prepare(
         `SELECT COUNT(DISTINCT session) AS c FROM event
-          WHERE name = 'visit' AND date(created_at, ?) = date('now', ?)`,
+          WHERE name = 'visit' AND date(created_at, '${KST}') = date('now', '${KST}')`,
       )
-      .get(KST, KST) as { c: number }
+      .get() as { c: number }
   ).c;
   const todayGames = (
     db
       .prepare(
-        `SELECT COUNT(*) AS c FROM event WHERE name = 'end' AND date(created_at, ?) = date('now', ?)`,
+        `SELECT COUNT(*) AS c FROM event
+          WHERE name = 'end' AND date(created_at, '${KST}') = date('now', '${KST}')`,
       )
-      .get(KST, KST) as { c: number }
+      .get() as { c: number }
   ).c;
+  // 기간 안에서 세션당 몇 판 — 결과 창 광고 노출 수와 같은 값
   const perSession = (
     db
       .prepare(
         `SELECT ROUND(AVG(n), 1) AS a FROM
-           (SELECT COUNT(*) AS n FROM event WHERE name = 'end' AND session IS NOT NULL GROUP BY session)`,
+           (SELECT COUNT(*) AS n FROM event
+             WHERE name = 'end' AND session IS NOT NULL AND ${IN_RANGE}
+             GROUP BY session)`,
       )
-      .get() as { a: number | null }
+      .get(from, to) as { a: number | null }
   ).a;
   const scores = (db.prepare(`SELECT COUNT(*) AS c FROM score`).get() as { c: number }).c;
 
   return {
+    range: { from, to, bucket },
     daily,
     byMode,
     funnel: {
