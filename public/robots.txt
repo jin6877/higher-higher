@@ -1,0 +1,8 @@
+User-agent: *
+Allow: /
+
+# 점검·통계 페이지는 검색에 걸릴 필요가 없다
+Disallow: /adtest.html
+Disallow: /stats
+
+Sitemap: https://higher.brag.io.kr/sitemap.xml
