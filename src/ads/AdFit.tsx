@@ -3,17 +3,42 @@ import { useEffect, useRef, useState } from "react";
 /**
  * 카카오 애드핏 광고 한 칸.
  *
- * ba.min.js 는 "로드되는 시점"에 페이지에서 ins.kakao_ad_area 를 찾아 광고를 채운다.
- * 이 게임은 페이지 이동 없이 모달만 바뀌는 구조라, 칸이 새로 뜰 때마다 ins 와 스크립트를
- * 함께 붙여야 광고가 그려진다. 반대로 시간마다 자동으로 새로 부르지는 않는다 —
- * 사용자 행동 없이 노출을 늘리는 건 광고 정책 위반 소지가 있다.
+ * SDK(ba.min.js) 동작은 실제 스크립트를 뜯어 확인한 것에 맞췄다.
+ *  - 로드되면 700ms 마다 페이지를 훑어 새로 생긴 ins.kakao_ad_area 를 잡아간다.
+ *    => 스크립트는 페이지당 한 번만 넣으면 된다. 광고 칸마다 다시 넣을 필요가 없다.
+ *  - 같은 data-ad-unit 은 페이지 안에서 유일해야 하고(한 페이지 4개 제한),
+ *    칸을 없앨 때 kakaoAdFit.destroy() 로 목록에서 빼지 않으면 등록이 쌓인다.
+ *    => 결과 창이 여러 번 뜨는 이 게임에서는 정리하지 않으면 몇 판 뒤부터 광고가 안 나온다.
+ *  - data-ad-onload / data-ad-onfail 에 "전역 함수 이름"을 적으면 채워짐/실패를 알려준다.
  *
  * 자리(height)는 미리 잡아 둔다. 광고가 늦게 떠서 아래 버튼을 밀어내면 그 순간 잘못 눌리기 쉽다.
+ * 시간마다 자동으로 다시 부르지는 않는다 — 사용자 행동 없이 노출을 늘리는 건 정책 위반 소지가 있다.
  */
-const SCRIPT_SRC = "//t1.kakaocdn.net/kas/static/ba.min.js";
-// 광고가 안 채워졌을 때 빈 자리를 접기까지의 시간. 자리가 접히면 아래 내용이 위로 올라오므로,
-// 버튼을 누를 수 있게 되는 시점(App 의 RETRY_DELAY_MS = 2초)보다 반드시 먼저 끝나야 한다.
-const FAIL_MS = 1500;
+const SCRIPT_SRC = "https://t1.kakaocdn.net/kas/static/ba.min.js";
+// 채워짐/실패 콜백이 둘 다 오지 않는 경우(스크립트 차단 등)에만 쓰는 대비책.
+// 버튼이 풀리는 시점(App 의 RETRY_DELAY_MS = 2초)보다 먼저 끝나야 자리가 접히며 버튼이 움직이지 않는다.
+const FALLBACK_MS = 1500;
+
+let scriptPromise: Promise<void> | null = null;
+function loadScriptOnce(): Promise<void> {
+  if (!scriptPromise) {
+    scriptPromise = new Promise<void>((resolve, reject) => {
+      const s = document.createElement("script");
+      s.async = true;
+      s.src = SCRIPT_SRC;
+      s.onload = () => resolve();
+      s.onerror = () => reject(new Error("adfit script"));
+      document.head.appendChild(s);
+    });
+  }
+  return scriptPromise;
+}
+
+interface AdFitSdk {
+  destroy?: (target: string | HTMLElement) => void;
+}
+
+let seq = 0;
 
 export function AdFit({
   unit,
@@ -35,25 +60,42 @@ export function AdFit({
   useEffect(() => {
     const box = boxRef.current;
     if (!box || mock) return;
+    let alive = true;
+
     const ins = document.createElement("ins");
     ins.className = "kakao_ad_area";
     ins.style.display = "none";
     ins.setAttribute("data-ad-unit", unit);
     ins.setAttribute("data-ad-width", String(width));
     ins.setAttribute("data-ad-height", String(height));
-    const script = document.createElement("script");
-    script.async = true;
-    script.src = SCRIPT_SRC;
-    box.appendChild(ins);
-    box.appendChild(script);
 
-    setEmpty(false);
-    const t = window.setTimeout(() => {
-      // 이미 떠 있는 광고를 숨기지는 않는다. 자리만 접어 두고, 늦게 오면 그때 늘어난다.
-      if (!ins.querySelector("iframe")) setEmpty(true);
-    }, FAIL_MS);
+    // 콜백은 전역 "이름"으로만 지정할 수 있어서 이름을 만들어 걸고, 정리할 때 지운다.
+    const onLoadName = `__adfitLoad${++seq}`;
+    const onFailName = `__adfitFail${seq}`;
+    const globals = window as unknown as Record<string, unknown>;
+    globals[onLoadName] = () => alive && setEmpty(false);
+    globals[onFailName] = () => alive && setEmpty(true);
+    ins.setAttribute("data-ad-onload", onLoadName);
+    ins.setAttribute("data-ad-onfail", onFailName);
+
+    box.appendChild(ins);
+    loadScriptOnce().catch(() => alive && setEmpty(true));
+
+    const fallback = window.setTimeout(() => {
+      if (alive && !ins.querySelector("iframe")) setEmpty(true);
+    }, FALLBACK_MS);
+
     return () => {
-      window.clearTimeout(t);
+      alive = false;
+      window.clearTimeout(fallback);
+      delete globals[onLoadName];
+      delete globals[onFailName];
+      // 같은 광고 단위를 다음 판에 다시 쓰려면 SDK 목록에서 빼야 한다.
+      try {
+        (window as { kakaoAdFit?: AdFitSdk }).kakaoAdFit?.destroy?.(ins);
+      } catch {
+        /* SDK 미초기화(도메인 미승인·차단 등) — 무시 */
+      }
       box.replaceChildren();
     };
   }, [unit, width, height, mock]);
