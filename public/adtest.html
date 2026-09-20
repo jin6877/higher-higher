@@ -1,0 +1,81 @@
+<!doctype html>
+<html lang="ko">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="robots" content="noindex" />
+    <title>애드핏 점검</title>
+    <style>
+      body { margin: 0; padding: 20px; background: #0b1026; color: #fff;
+             font: 15px/1.6 -apple-system, BlinkMacSystemFont, "Apple SD Gothic Neo", sans-serif; }
+      h1 { font-size: 18px; margin: 0 0 4px; }
+      p.sub { margin: 0 0 20px; color: rgba(255,255,255,.5); font-size: 13px; }
+      .slot { margin: 0 0 24px; padding: 12px; background: rgba(255,255,255,.06); border-radius: 12px; }
+      .name { font-size: 12px; color: rgba(255,255,255,.5); margin-bottom: 8px; }
+      .state { margin-top: 10px; font-weight: 700; font-size: 13px; }
+      .ok { color: #7ee2a8 } .no { color: #ff8f8f } .wait { color: rgba(255,255,255,.45) }
+      code { background: rgba(255,255,255,.1); padding: 1px 5px; border-radius: 4px; font-size: 12px; }
+    </style>
+  </head>
+  <body>
+    <h1>애드핏 점검 페이지</h1>
+    <p class="sub">
+      게임 코드를 전혀 쓰지 않고, 카카오가 준 스니펫만 그대로 올린 페이지입니다.<br />
+      여기서도 광고가 안 나오면 원인은 애드핏 쪽(심사·승인·재고)이고, 여기서는 나오면 게임 쪽 통합 문제입니다.
+    </p>
+
+    <div class="slot">
+      <div class="name">320 × 100 — DAN-kFN7pcmVv6uh0UQ7 (게임 결과 창에서 쓰는 단위)</div>
+      <ins class="kakao_ad_area" style="display:none;"
+           data-ad-unit="DAN-kFN7pcmVv6uh0UQ7"
+           data-ad-width="320" data-ad-height="100"
+           data-ad-onload="onLoad100" data-ad-onfail="onFail100"></ins>
+      <div class="state wait" id="s100">기다리는 중…</div>
+    </div>
+
+    <div class="slot">
+      <div class="name">320 × 50 — DAN-QI0Td2XGZgshlJYj (아직 게임에 안 쓰는 단위)</div>
+      <ins class="kakao_ad_area" style="display:none;"
+           data-ad-unit="DAN-QI0Td2XGZgshlJYj"
+           data-ad-width="320" data-ad-height="50"
+           data-ad-onload="onLoad50" data-ad-onfail="onFail50"></ins>
+      <div class="state wait" id="s50">기다리는 중…</div>
+    </div>
+
+    <div class="slot">
+      <div class="name">SDK 상태</div>
+      <div class="state wait" id="sdk">확인 중…</div>
+    </div>
+
+    <script>
+      function mark(id, ok, text) {
+        var el = document.getElementById(id);
+        el.className = "state " + (ok ? "ok" : "no");
+        el.textContent = text;
+      }
+      function onLoad100() { mark("s100", true, "✅ 광고가 채워졌습니다"); }
+      function onFail100() { mark("s100", false, "❌ 빈 응답 (광고 없음)"); }
+      function onLoad50() { mark("s50", true, "✅ 광고가 채워졌습니다"); }
+      function onFail50() { mark("s50", false, "❌ 빈 응답 (광고 없음)"); }
+
+      // SDK 가 초기화됐는지 — 미승인 도메인에서는 전역 등록조차 하지 않는다.
+      setTimeout(function () {
+        var t = typeof window.kakaoAdFit;
+        mark("sdk", t === "object",
+          t === "object" ? "✅ SDK 초기화됨 (kakaoAdFit = object)"
+                         : "❌ SDK 초기화 안 됨 (kakaoAdFit = " + t + ")");
+      }, 4000);
+
+      setTimeout(function () {
+        ["s100", "s50"].forEach(function (id) {
+          var el = document.getElementById(id);
+          if (el.className.indexOf("wait") >= 0) {
+            el.className = "state no";
+            el.textContent = "⏳ 10초 동안 아무 응답도 없었습니다 (요청 자체가 안 나갔을 수 있음)";
+          }
+        });
+      }, 10000);
+    </script>
+    <script type="text/javascript" src="https://t1.kakaocdn.net/kas/static/ba.min.js" async></script>
+  </body>
+</html>
