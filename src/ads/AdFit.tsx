@@ -5,8 +5,9 @@ import { logEvent } from "../analytics";
  * 카카오 애드핏 광고 한 칸.
  *
  * SDK(ba.min.js) 동작은 실제 스크립트를 뜯어 확인한 것에 맞췄다.
- *  - 로드되면 700ms 마다 페이지를 훑어 새로 생긴 ins.kakao_ad_area 를 잡아간다.
- *    => 스크립트는 페이지당 한 번만 넣으면 된다. 광고 칸마다 다시 넣을 필요가 없다.
+ *  - 광고를 그리는 건 로드 직후의 "초기 스캔" 한 번뿐이다. 700ms 루프는 data-ad-preload="Y"
+ *    가 붙은 것만 본다. => 그 뒤에 만든 광고 자리는 kakaoAdFit.render(요소) 로 직접 그려달라고
+ *    해야 한다. 이걸 안 해서 첫 결과 창만 광고가 나오고 그 뒤로는 계속 비어 있었다.
  *  - 같은 data-ad-unit 은 페이지 안에서 유일해야 하고(한 페이지 4개 제한),
  *    칸을 없앨 때 kakaoAdFit.destroy() 로 목록에서 빼지 않으면 등록이 쌓인다.
  *    => 결과 창이 여러 번 뜨는 이 게임에서는 정리하지 않으면 몇 판 뒤부터 광고가 안 나온다.
@@ -36,8 +37,11 @@ function loadScriptOnce(): Promise<void> {
 }
 
 interface AdFitSdk {
+  /** 특정 광고 자리를 그린다. 초기 스캔 이후에 만든 자리는 이걸 불러야 한다. */
+  render?: (el: HTMLElement) => void;
   destroy?: (target: string | HTMLElement) => void;
 }
+const sdk = () => (window as { kakaoAdFit?: AdFitSdk }).kakaoAdFit;
 
 let seq = 0;
 
@@ -94,8 +98,16 @@ export function AdFit({
     ins.setAttribute("data-ad-onload", onLoadName);
     ins.setAttribute("data-ad-onfail", onFailName);
 
+    // SDK 가 이미 떠 있으면 초기 스캔은 지나간 뒤다 — 이 자리는 직접 그려달라고 해야 한다.
+    // 아직 안 떠 있으면 로드 직후의 초기 스캔이 이 태그를 발견하므로 그대로 두면 된다
+    // (여기서 또 render 를 부르면 같은 자리를 두 번 그리게 된다).
+    const needsRender = !!sdk();
     box.appendChild(ins);
-    loadScriptOnce().catch(() => alive && setEmpty(true));
+    loadScriptOnce()
+      .then(() => {
+        if (alive && needsRender) sdk()?.render?.(ins);
+      })
+      .catch(() => alive && setEmpty(true));
 
     const fallback = window.setTimeout(() => {
       if (alive && !ins.querySelector("iframe")) setEmpty(true);
@@ -114,10 +126,10 @@ export function AdFit({
       // 경우엔 ads[0] 자체가 없어 매칭에 실패하고 아무것도 지우지 않는다. 그러면 등록이
       // 쌓이고(유일해야 함·페이지당 4개), 700ms 루프가 이미 떼어낸 요소를 계속 건드린다.
       // 단위 id(문자열)로 넘기면 목록에서 바로 지운다 — 이쪽을 먼저.
-      const sdk = (window as { kakaoAdFit?: AdFitSdk }).kakaoAdFit;
+      const api = sdk();
       try {
-        sdk?.destroy?.(unit);
-        sdk?.destroy?.(ins);
+        api?.destroy?.(unit);
+        api?.destroy?.(ins);
       } catch {
         /* SDK 미초기화(도메인 미승인·차단 등) — 무시 */
       }
