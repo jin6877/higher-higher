@@ -6,10 +6,14 @@ import { logEvent } from "../analytics";
  *
  * SDK(ba.min.js) 동작은 실제 스크립트를 뜯어 확인한 것에 맞췄다.
  *  - 광고를 그리는 건 로드 직후의 "초기 스캔" 한 번뿐이다. 700ms 루프는 data-ad-preload="Y"
- *    가 붙은 것만 본다. => 그 뒤에 만든 광고 자리는 kakaoAdFit.render(요소) 로 직접 그려달라고
+ *    가 붙은 것만 본다. => 그 뒤에 만든 광고 자리는 adfit.render(요소) 로 직접 그려달라고
  *    해야 한다. 이걸 안 해서 첫 결과 창만 광고가 나오고 그 뒤로는 계속 비어 있었다.
+ *  - 배너 API 는 window.adfit 이다(window.kakaoAdFit 은 전면광고·설정용이라 render/destroy 가 없다).
+ *      window.adfit()            전체 스캔 후 렌더 — 스크립트 로드 직후 딱 한 번 저절로 돈다
+ *      window.adfit.render(el)   특정 자리 하나 렌더
+ *      window.adfit.destroy(x)   단위 id 나 요소로 등록 해제
  *  - 같은 data-ad-unit 은 페이지 안에서 유일해야 하고(한 페이지 4개 제한),
- *    칸을 없앨 때 kakaoAdFit.destroy() 로 목록에서 빼지 않으면 등록이 쌓인다.
+ *    칸을 없앨 때 destroy 로 목록에서 빼지 않으면 등록이 쌓여 "중복" 예외로 렌더가 막힌다.
  *    => 결과 창이 여러 번 뜨는 이 게임에서는 정리하지 않으면 몇 판 뒤부터 광고가 안 나온다.
  *  - data-ad-onload / data-ad-onfail 에 "전역 함수 이름"을 적으면 채워짐/실패를 알려준다.
  *
@@ -36,12 +40,12 @@ function loadScriptOnce(): Promise<void> {
   return scriptPromise;
 }
 
-interface AdFitSdk {
+interface AdFitApi {
   /** 특정 광고 자리를 그린다. 초기 스캔 이후에 만든 자리는 이걸 불러야 한다. */
   render?: (el: HTMLElement) => void;
   destroy?: (target: string | HTMLElement) => void;
 }
-const sdk = () => (window as { kakaoAdFit?: AdFitSdk }).kakaoAdFit;
+const sdk = () => (window as { adfit?: AdFitApi }).adfit;
 
 let seq = 0;
 
