@@ -48,14 +48,21 @@ body {
   }
 }
 
+/* 결과 창 등장.
+   scale 을 쓰면 안 된다 — 이 창 안에는 애드핏 광고가 있고, 애드핏은 소재를 붙인 직후
+   getBoundingClientRect() 로 광고 크기를 재서 지정 크기의 95% 미만이면 "화면에 보이지 않는
+   광고" 로 보고 방금 만든 소재를 도로 지워버린다. getBoundingClientRect 는 transform 이
+   반영된 크기를 돌려주므로, 애니메이션 도중(scale 0.85~0.95)에 소재가 도착하면 100px 짜리
+   광고가 85~92px 로 측정돼 매번 철거됐다. 이동·투명도만 쓰면 잰 크기가 변하지 않는다.
+   => 이 창(또는 광고를 품은 조상)에 scale/zoom 을 다시 넣지 말 것. */
 @keyframes pop-in {
   0% {
     opacity: 0;
-    transform: scale(0.85) translateY(12px);
+    transform: translateY(14px);
   }
   100% {
     opacity: 1;
-    transform: scale(1) translateY(0);
+    transform: translateY(0);
   }
 }
 

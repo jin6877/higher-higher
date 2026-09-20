@@ -7,7 +7,14 @@ import { logEvent } from "../analytics";
  * SDK(ba.min.js) 동작은 실제 스크립트를 뜯어 확인한 것에 맞췄다.
  *  - 광고를 그리는 건 로드 직후의 "초기 스캔" 한 번뿐이다. 700ms 루프는 data-ad-preload="Y"
  *    가 붙은 것만 본다. => 그 뒤에 만든 광고 자리는 adfit.render(요소) 로 직접 그려달라고
- *    해야 한다. 이걸 안 해서 첫 결과 창만 광고가 나오고 그 뒤로는 계속 비어 있었다.
+ *    해야 한다.
+ *  - 소재를 붙인 직후 "화면에 보이는 광고인지" 를 스스로 검사한다. 바깥 래퍼와 iframe 을
+ *    getBoundingClientRect() 로 재서 가로 280px·세로 지정높이의 95% 에 못 미치면
+ *    AdFitAdPolicyError("Cannot visible ad on screen") 를 내고 방금 만든 소재를 도로 지운다.
+ *    getBoundingClientRect 는 transform 이 반영된 크기라, 광고를 품은 조상에 scale 이 걸려
+ *    있으면 크기가 실제보다 작게 측정된다. => 결과 창 등장 애니메이션(pop-in)에서 scale 을
+ *    빼 둔 이유다(src/index.css). 조상에 scale/zoom 을 넣으면 광고가 조용히 사라진다.
+ *    실패는 전부 애드핏이 자기 Sentry 로 보고하므로, 한 판마다 한 건씩 쌓여 429 가 뜬다.
  *  - 배너 API 는 window.adfit 이다(window.kakaoAdFit 은 전면광고·설정용이라 render/destroy 가 없다).
  *      window.adfit()            전체 스캔 후 렌더 — 스크립트 로드 직후 딱 한 번 저절로 돈다
  *      window.adfit.render(el)   특정 자리 하나 렌더
