@@ -110,8 +110,14 @@ export function AdFit({
       delete globals[onLoadName];
       delete globals[onFailName];
       // 같은 광고 단위를 다음 판에 다시 쓰려면 SDK 목록에서 빼야 한다.
+      // 요소로 넘기면 SDK 가 ads[0].container.element 와 비교해 찾는데, 광고가 안 채워진
+      // 경우엔 ads[0] 자체가 없어 매칭에 실패하고 아무것도 지우지 않는다. 그러면 등록이
+      // 쌓이고(유일해야 함·페이지당 4개), 700ms 루프가 이미 떼어낸 요소를 계속 건드린다.
+      // 단위 id(문자열)로 넘기면 목록에서 바로 지운다 — 이쪽을 먼저.
+      const sdk = (window as { kakaoAdFit?: AdFitSdk }).kakaoAdFit;
       try {
-        (window as { kakaoAdFit?: AdFitSdk }).kakaoAdFit?.destroy?.(ins);
+        sdk?.destroy?.(unit);
+        sdk?.destroy?.(ins);
       } catch {
         /* SDK 미초기화(도메인 미승인·차단 등) — 무시 */
       }
