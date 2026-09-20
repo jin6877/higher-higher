@@ -20,7 +20,9 @@ function sessionId(): string {
   }
 }
 
-export type EventName = "visit" | "start" | "end" | "submit" | "share" | "rank";
+export type EventName =
+  | "visit" | "start" | "end" | "submit" | "share" | "rank"
+  | "ad_fill" | "ad_empty";
 
 export function logEvent(
   name: EventName,

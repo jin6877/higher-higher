@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { logEvent } from "../analytics";
 
 /**
  * 카카오 애드핏 광고 한 칸.
@@ -73,8 +74,23 @@ export function AdFit({
     const onLoadName = `__adfitLoad${++seq}`;
     const onFailName = `__adfitFail${seq}`;
     const globals = window as unknown as Record<string, unknown>;
-    globals[onLoadName] = () => alive && setEmpty(false);
-    globals[onFailName] = () => alive && setEmpty(true);
+    // 광고가 실제로 채워지는 비율과 걸린 시간을 남긴다 — 안 뜨는 게 재고 문제인지
+    // 우리 쪽 문제인지 /stats 에서 숫자로 보려고. 광고 요청을 더 만들지는 않는다.
+    const shownAt = Date.now();
+    let logged = false;
+    const log = (name: "ad_fill" | "ad_empty") => {
+      if (logged) return;
+      logged = true;
+      logEvent(name, { durationMs: Date.now() - shownAt });
+    };
+    globals[onLoadName] = () => {
+      log("ad_fill");
+      if (alive) setEmpty(false);
+    };
+    globals[onFailName] = () => {
+      log("ad_empty");
+      if (alive) setEmpty(true);
+    };
     ins.setAttribute("data-ad-onload", onLoadName);
     ins.setAttribute("data-ad-onfail", onFailName);
 
@@ -84,9 +100,12 @@ export function AdFit({
     const fallback = window.setTimeout(() => {
       if (alive && !ins.querySelector("iframe")) setEmpty(true);
     }, FALLBACK_MS);
+    // 창을 닫을 때까지 아무 콜백도 안 왔으면 그것도 '안 채워짐' 으로 센다.
+    const markUnresolved = () => log("ad_empty");
 
     return () => {
       alive = false;
+      markUnresolved();
       window.clearTimeout(fallback);
       delete globals[onLoadName];
       delete globals[onFailName];

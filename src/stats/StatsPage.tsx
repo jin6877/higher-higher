@@ -16,6 +16,7 @@ interface Stats {
   byMode: { mode: string; games: number; avgHeightM: number; avgBlocks: number; avgSec: number; submits: number }[];
   funnel: { visits: number; starts: number; ends: number; submits: number; shares: number };
   totals: { todayVisitors: number; todayGames: number; gamesPerSession: number; scores: number };
+  ads: { fill: number; empty: number; rate: number | null; avgSec: number | null };
 }
 
 const MODE_LABEL: Record<string, string> = { basic: "기본", random: "도전" };
@@ -104,7 +105,7 @@ export function StatsPage() {
     );
   }
 
-  const { daily, byMode, funnel, totals } = data;
+  const { daily, byMode, funnel, totals, ads } = data;
   const max = Math.max(1, ...daily.flatMap((d) => [d.visitors, d.ends]));
   const last = daily[daily.length - 1];
   const funnelMax = Math.max(1, ...Object.values(funnel));
@@ -175,6 +176,24 @@ export function StatsPage() {
               )}
             </div>
           </>
+        )}
+      </Section>
+
+      <Section title="광고">
+        {/* 결과 창에 광고 자리가 뜬 횟수 중 실제로 채워진 비율. 0% 에 가까우면 재고 문제다. */}
+        {ads.fill + ads.empty === 0 ? (
+          <p className="py-6 text-center text-sm text-white/40">아직 기록이 없어요</p>
+        ) : (
+          <div className="grid grid-cols-3 gap-2.5">
+            <Tile label="응답률" value={ads.rate ?? 0} hint="광고가 채워진 비율(%)" />
+            <Tile label="채워짐" value={ads.fill} />
+            <Tile label="빈 응답" value={ads.empty} />
+          </div>
+        )}
+        {ads.avgSec != null && (
+          <p className="mt-2 text-[11px] font-medium text-white/40">
+            채워질 때 평균 {ads.avgSec}초 걸려요
+          </p>
         )}
       </Section>
 

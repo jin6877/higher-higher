@@ -170,6 +170,8 @@ export interface UsageStats {
   byMode: { mode: string; games: number; avgHeightM: number; avgBlocks: number; avgSec: number; submits: number }[];
   funnel: { visits: number; starts: number; ends: number; submits: number; shares: number };
   totals: { todayVisitors: number; todayGames: number; gamesPerSession: number; scores: number };
+  /** 광고가 실제로 채워진 비율 — 안 뜨는 게 재고 문제인지 판단하는 값. */
+  ads: { fill: number; empty: number; rate: number | null; avgSec: number | null };
 }
 
 const KST = "+9 hours";
@@ -259,8 +261,25 @@ export function usageStats(from: string, to: string): UsageStats {
   ).a;
   const scores = (db.prepare(`SELECT COUNT(*) AS c FROM score`).get() as { c: number }).c;
 
+  const adFill = count("ad_fill");
+  const adEmpty = count("ad_empty");
+  const adSec = (
+    db
+      .prepare(
+        `SELECT ROUND(AVG(duration_ms) / 1000.0, 2) AS a FROM event
+          WHERE name = 'ad_fill' AND duration_ms IS NOT NULL AND ${IN_RANGE}`,
+      )
+      .get(from, to) as { a: number | null }
+  ).a;
+
   return {
     range: { from, to, bucket },
+    ads: {
+      fill: adFill,
+      empty: adEmpty,
+      rate: adFill + adEmpty > 0 ? Math.round((adFill / (adFill + adEmpty)) * 100) : null,
+      avgSec: adSec,
+    },
     daily,
     byMode,
     funnel: {

@@ -58,7 +58,8 @@ export function validateScore(body: unknown): CleanScore {
 // ---- 이용 로그 ----
 
 /** 기록하는 이벤트 종류. 목록에 없는 이름은 버린다(임의 데이터 적재 방지). */
-export const EVENT_NAMES = ["visit", "start", "end", "submit", "share", "rank"] as const;
+// ad_fill / ad_empty = 광고가 채워졌는지. duration_ms 에 결과 창이 뜬 뒤 걸린 시간을 담는다.
+export const EVENT_NAMES = ["visit", "start", "end", "submit", "share", "rank", "ad_fill", "ad_empty"] as const;
 export type EventName = (typeof EVENT_NAMES)[number];
 
 export interface CleanEvent {
