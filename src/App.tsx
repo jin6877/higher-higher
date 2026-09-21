@@ -20,6 +20,7 @@ import {
   Wobble,
 } from "./ui/icons";
 import { logEvent } from "./analytics";
+import { lang, setLang, t } from "./i18n";
 import { LeaderboardList } from "./leaderboard/LeaderboardPanel";
 import {
   loadPlayerName,
@@ -42,7 +43,8 @@ const RESULT_AD_UNIT = "DAN-kFN7pcmVv6uh0UQ7"; // 320×100
 // 버튼이 움직이는 일이 '누를 수 있게 되기 전' 에 끝나야 잘못 누르지 않는다.
 const RETRY_DELAY_MS = 2000;
 
-const MODE_LABEL: Record<GameMode, string> = { basic: "기본", random: "도전" };
+// 모드 이름은 두 군데(HUD 줄·결과 창)에서 짧게 쓰인다 — i18n 의 modeShort 를 그대로.
+const MODE_LABEL = t.modeShort as Record<GameMode, string>;
 
 let visitLogged = false; // StrictMode 개발 모드의 두 번 마운트에서 방문이 두 번 찍히지 않게
 
@@ -161,7 +163,7 @@ export default function App() {
     setSubmitState("sending");
     try {
       const r = await submitScore({
-        playerName: trimmed || "익명",
+        playerName: trimmed || t.anonymous,
         heightCm: toHeightCm(hud.peakM),
         blocks: hud.peakBlocks,
         mode: hud.mode,
@@ -180,12 +182,12 @@ export default function App() {
   const shareLink = useCallback(async () => {
     if (!hud) return;
     logEvent("share", { mode: hud.mode });
-    const text = `높이 높이에서 ${formatHeight(hud.peakM)}m · ${hud.peakBlocks}블록 쌓았어요! 🧱 도전해보세요`;
+    const text = t.shareText(formatHeight(hud.peakM), hud.peakBlocks);
     const url = window.location.origin;
     const nav = navigator as Navigator & { share?: (d: unknown) => Promise<void> };
     if (nav.share) {
       try {
-        await nav.share({ title: "높이 높이", text, url });
+        await nav.share({ title: t.brand, text, url });
         return;
       } catch {
         return; // 사용자가 공유 취소
@@ -222,7 +224,7 @@ export default function App() {
       const file = new File([blob], "higher-higher.png", { type: "image/png" });
       const nav = navigator as Navigator & { canShare?: (d: unknown) => boolean };
       if (nav.canShare && nav.canShare({ files: [file] })) {
-        await navigator.share({ files: [file], title: "높이 높이", text: "내 탑 기록!" });
+        await navigator.share({ files: [file], title: t.brand, text: t.shareCardText });
         return;
       }
     } catch {
@@ -267,7 +269,7 @@ export default function App() {
         className={`pointer-events-auto absolute right-[max(0.75rem,env(safe-area-inset-right,0px))] top-[var(--top-line)] z-30 grid h-11 w-11 place-items-center rounded-chip border-[3px] border-ink bg-cream text-ink shadow-hard transition active:translate-x-[3px] active:translate-y-[3px] active:shadow-none ${
           phase === "playing" ? "max-[560px]:top-[calc(var(--top-line)+104px)]" : ""
         }`}
-        aria-label="소리 켜기/끄기"
+        aria-label={t.soundToggle}
       >
         {muted ? <VolumeOff size={21} /> : <VolumeOn size={21} />}
       </button>
@@ -278,7 +280,7 @@ export default function App() {
           <div className="pointer-events-none absolute inset-x-0 top-0 z-20 px-4 pt-[var(--top-line)]">
             <div className="mx-auto flex max-w-md items-start justify-between gap-3">
               <div className="rounded-slot border-[3px] border-ink bg-ink/90 px-4 py-2">
-                <div className="text-[11px] font-bold tracking-wide text-cream/65">높이</div>
+                <div className="text-[11px] font-bold tracking-wide text-cream/65">{t.hudHeight}</div>
                 {/* 실시간으로 바뀌는 숫자는 본문 서체 + tabular-nums 로 둔다 — 디스플레이
                     서체(Black Han Sans)는 고정폭 숫자가 없어서 자릿수마다 폭이 흔들린다. */}
                 <div className="text-3xl font-bold leading-none tabular-nums text-cream">
@@ -289,7 +291,7 @@ export default function App() {
 
               {/* next-block preview */}
               <div className="flex flex-col items-center rounded-slot border-[3px] border-ink bg-ink/90 px-3 py-1.5">
-                <div className="text-[10px] font-bold tracking-wide text-cream/60">다음</div>
+                <div className="text-[10px] font-bold tracking-wide text-cream/60">{t.hudNext}</div>
                 <div className="mt-0.5 grid h-9 w-9 place-items-center">
                   {hud.next ? (
                     <ShapePreview kind={hud.next.kind} color={hud.next.color} />
@@ -305,7 +307,7 @@ export default function App() {
               </div>
 
               <div className="rounded-slot border-[3px] border-ink bg-ink/90 px-4 py-2 text-right">
-                <div className="text-[11px] font-bold tracking-wide text-cream/65">블록</div>
+                <div className="text-[11px] font-bold tracking-wide text-cream/65">{t.hudBlocks}</div>
                 <div className="text-3xl font-bold leading-none tabular-nums text-cream">
                   {hud.placed}
                   <span className="text-lg text-cream/55">/{hud.total}</span>
@@ -320,7 +322,7 @@ export default function App() {
               />
             </div>
             <div className="mx-auto mt-1 max-w-md text-center text-[11px] font-semibold text-cream/55">
-              {MODE_LABEL[hud.mode]} · 최고 {formatHeight(hud.bestM)}m · {hud.bestBlocks}블록
+              {t.hudBest(MODE_LABEL[hud.mode], formatHeight(hud.bestM), hud.bestBlocks)}
             </div>
           </div>
 
@@ -329,7 +331,7 @@ export default function App() {
             <div className="pointer-events-none absolute inset-x-0 top-32 z-20 flex justify-center">
               <div className="flex animate-pulse items-center gap-1.5 rounded-chip border-[3px] border-ink bg-gold px-4 py-1.5 text-sm font-bold text-ink shadow-hard">
                 <Wobble size={17} />
-                휘청거려요!
+                {t.wobbling}
               </div>
             </div>
           )}
@@ -340,7 +342,7 @@ export default function App() {
               <button
                 onClick={() => gameRef.current?.rotate(-1)}
                 className="pointer-events-auto grid h-14 w-14 shrink-0 place-items-center rounded-block border-[3px] border-ink bg-cream text-2xl text-ink shadow-hard transition active:translate-x-[3px] active:translate-y-[3px] active:shadow-none"
-                aria-label="반시계 회전"
+                aria-label={t.rotateCcw}
               >
                 ↺
               </button>
@@ -348,18 +350,18 @@ export default function App() {
                 onClick={() => gameRef.current?.drop()}
                 className="pointer-events-auto h-14 flex-1 rounded-block border-[3px] border-ink bg-pop font-display text-xl text-ink shadow-hard-md transition active:translate-x-[5px] active:translate-y-[5px] active:shadow-none"
               >
-                떨어뜨리기
+                {t.drop}
               </button>
               <button
                 onClick={() => gameRef.current?.rotate(1)}
                 className="pointer-events-auto grid h-14 w-14 shrink-0 place-items-center rounded-block border-[3px] border-ink bg-cream text-2xl text-ink shadow-hard transition active:translate-x-[3px] active:translate-y-[3px] active:shadow-none"
-                aria-label="시계 회전"
+                aria-label={t.rotateCw}
               >
                 ↻
               </button>
             </div>
             <p className="mt-2 text-center text-[11px] font-semibold text-cream/55">
-              블록이 좌우로 왕복해요 · 탭 / 스페이스로 드롭 · ↺↻ 회전
+              {t.controlHint}
             </p>
           </div>
         </>
@@ -374,18 +376,18 @@ export default function App() {
           <div className="relative flex flex-1 flex-col items-center justify-center px-6 pt-[calc(env(safe-area-inset-top,0px)+1.5rem)] pb-[max(1.5rem,calc(env(safe-area-inset-bottom,0px)+1rem))] text-center [@media(max-aspect-ratio:5/4)]:justify-between">
             <div ref={homeTopRef} className="animate-[rise_0.7s_ease-out]">
               <h1 className="text-hard-lg font-display text-[54px] leading-[0.98] text-cream sm:text-7xl">
-                높이 높이
+                {t.brand}
               </h1>
               <p className="mt-3 text-xs font-bold tracking-[0.3em] text-cream/60">
-                HIGHER HIGHER
+                {t.brandSub}
               </p>
               <div className="mt-5 inline-block rounded-chip border-[3px] border-ink bg-gold px-4 py-1.5 shadow-hard">
                 <span className="text-xs font-bold tracking-wide text-ink">
-                  무너지기 전까지, 더 높이
+                  {t.tagline}
                 </span>
               </div>
               <p className="mx-auto mt-4 max-w-sm text-sm font-semibold leading-relaxed text-cream/75">
-                블록을 하나씩 쌓아 최고 높이 기록에 도전하세요.
+                {t.intro}
               </p>
             </div>
 
@@ -399,17 +401,17 @@ export default function App() {
                     tone 만 바꾸면 되니 되돌리거나 mint 로 바꾸는 건 한 단어다. */}
                 <ModeButton
                   tone="cream"
-                  title="기본 모드"
-                  badge="쉬움"
-                  desc="정사각형만"
+                  title={t.modeBasic}
+                  badge={t.modeBasicBadge}
+                  desc={t.modeBasicDesc}
                   best={bestOf("basic")}
                   onClick={() => start("basic")}
                 />
                 <ModeButton
                   tone="pop"
-                  title="도전 모드"
-                  badge="랜덤"
-                  desc="모양이 매번 바뀜"
+                  title={t.modeRandom}
+                  badge={t.modeRandomBadge}
+                  desc={t.modeRandomDesc}
                   best={bestOf("random")}
                   onClick={() => start("random")}
                 />
@@ -423,7 +425,16 @@ export default function App() {
                 className="pointer-events-auto mt-5 flex animate-[rise_1s_ease-out] items-center gap-2 rounded-chip border-[3px] border-cream bg-ink/60 px-6 py-2.5 text-sm font-bold text-cream transition active:scale-95"
               >
                 <Podium size={18} />
-                글로벌 랭킹
+                {t.leaderboard}
+              </button>
+
+              {/* 언어는 브라우저 설정으로 자동으로 고르지만, 그게 원하는 언어가 아닐 수
+                  있다(회사 PC 가 영어로 맞춰져 있다거나). 되돌릴 길은 열어 둔다. */}
+              <button
+                onClick={() => setLang(lang === "ko" ? "en" : "ko")}
+                className="pointer-events-auto mt-3 animate-[rise_1.1s_ease-out] px-3 py-2 text-xs font-bold text-cream/60 underline-offset-4 transition hover:text-cream hover:underline"
+              >
+                {t.switchTo}
               </button>
             </div>
           </div>
@@ -441,24 +452,24 @@ export default function App() {
               {phase === "clear" ? <Flag size={44} /> : <Collapse size={44} />}
             </div>
             <h2 className="mt-2 font-display text-[28px] leading-tight">
-              {phase === "clear" ? "완주 성공!" : "탑이 무너졌어요"}
+              {phase === "clear" ? t.clearTitle : t.fellTitle}
             </h2>
             <p className="mt-1 text-sm font-semibold text-ink/70">
-              {phase === "clear" ? "100블록을 모두 쌓았어요" : "균형을 잃고 와르르…"}
+              {phase === "clear" ? t.clearSub : t.fellSub}
             </p>
 
             <div className="mt-4 flex gap-2.5">
-              <Stat tone="gold" label="도달 높이" value={`${formatHeight(hud.peakM)}m`} />
-              <Stat tone="mint" label="블록" value={`${hud.peakBlocks}/${hud.total}`} />
+              <Stat tone="gold" label={t.statHeight} value={`${formatHeight(hud.peakM)}m`} />
+              <Stat tone="mint" label={t.statBlocks} value={`${hud.peakBlocks}/${hud.total}`} />
             </div>
             <div className="mt-2.5 flex items-center gap-2 rounded-block bg-ink px-3 py-2.5 text-left">
               <Podium size={17} className="shrink-0 text-gold" />
               <span className="flex-1 text-[12px] font-bold tabular-nums text-cream">
-                {MODE_LABEL[hud.mode]} 최고 {formatHeight(hud.bestM)}m · {hud.bestBlocks}블록
+                {t.bestLine(MODE_LABEL[hud.mode], formatHeight(hud.bestM), hud.bestBlocks)}
               </span>
               {hud.peakM >= hud.bestM - 0.05 && hud.peakM > 0 && (
                 <span className="shrink-0 rounded-chip bg-pop px-2 py-0.5 text-[10px] font-bold text-ink">
-                  신기록
+                  {t.newRecord}
                 </span>
               )}
             </div>
@@ -480,15 +491,15 @@ export default function App() {
                 {submitState === "done" && result ? (
                   <>
                     <div className="mb-2 flex items-center gap-1.5 text-sm font-bold text-ink">
-                      <Podium size={16} />내 순위{" "}
+                      <Podium size={16} />{t.myRank}{" "}
                       <span className="font-display text-lg">#{result.rank}</span>
                       <span className="font-semibold text-ink/70">
-                        / 총 {result.totalCount}명
+                        {t.ofTotal(result.totalCount)}
                       </span>
                     </div>
                     <LeaderboardList
                       preload={result.top}
-                      highlightName={name.trim() || "익명"}
+                      highlightName={name.trim() || t.anonymous}
                       limit={10}
                       mode={hud.mode}
                     />
@@ -496,15 +507,15 @@ export default function App() {
                 ) : (
                   <>
                     <div className="mb-2 text-left text-xs font-bold text-ink/70">
-                      글로벌 랭킹에 기록을 남겨보세요
+                      {t.submitPrompt}
                     </div>
                     <div className="flex gap-2">
                       <input
                         value={name}
                         onChange={(e) => setName(e.target.value)}
                         maxLength={20}
-                        placeholder="닉네임"
-                        aria-label="닉네임"
+                        placeholder={t.nickname}
+                        aria-label={t.nickname}
                         className="min-w-0 flex-1 rounded-slot border-[3px] border-ink bg-white px-3 py-2 text-sm font-semibold text-ink outline-none placeholder:text-ink/55 focus:border-pop"
                       />
                       <button
@@ -512,12 +523,12 @@ export default function App() {
                         disabled={submitState === "sending"}
                         className="shrink-0 rounded-slot border-[3px] border-ink bg-ink px-4 py-2 text-sm font-bold text-cream transition active:scale-95 disabled:opacity-60"
                       >
-                        {submitState === "sending" ? "등록 중…" : "등록"}
+                        {submitState === "sending" ? t.submitting : t.submit}
                       </button>
                     </div>
                     {submitState === "error" && (
                       <p className="mt-2 text-left text-xs font-bold text-pop">
-                        등록에 실패했어요. 잠시 후 다시 시도해주세요.
+                        {t.submitFailed}
                       </p>
                     )}
                   </>
@@ -528,7 +539,7 @@ export default function App() {
             {card && (
               <img
                 src={card}
-                alt="결과 카드"
+                alt={t.resultCard}
                 className="mt-4 w-full rounded-block border-[3px] border-ink"
               />
             )}
@@ -542,14 +553,14 @@ export default function App() {
                 className="flex items-center justify-center gap-2 rounded-block border-[3px] border-ink bg-pop py-3 font-display text-lg text-ink tabular-nums shadow-hard transition enabled:active:translate-x-[3px] enabled:active:translate-y-[3px] enabled:active:shadow-none disabled:cursor-default disabled:opacity-50"
               >
                 <Replay size={19} />
-                {retryLeft > 0 ? `다시 하기 ${retryLeft}` : "다시 하기"}
+                {retryLeft > 0 ? `${t.playAgain} ${retryLeft}` : t.playAgain}
               </button>
               <button
                 onClick={shareLink}
                 className="flex items-center justify-center gap-2 rounded-block border-[3px] border-ink bg-cream py-3 text-[15px] font-bold text-ink shadow-hard transition active:translate-x-[3px] active:translate-y-[3px] active:shadow-none"
               >
                 {shareCopied ? <Check size={18} /> : <Share size={18} />}
-                {shareCopied ? "복사됨" : "공유하기"}
+                {shareCopied ? t.copied : t.share}
               </button>
             </div>
             <button
@@ -557,14 +568,14 @@ export default function App() {
               className="mt-3 flex w-full items-center justify-center gap-2 rounded-block border-[3px] border-ink py-2.5 text-sm font-bold text-ink transition active:scale-[0.98]"
             >
               <CardIcon size={18} />
-              {card ? "결과 카드 저장 / 공유" : "결과 카드 만들기"}
+              {card ? t.saveCard : t.makeCard}
             </button>
             <button
               onClick={home}
               className="mt-3 inline-flex items-center gap-1.5 text-sm font-bold text-ink/70 transition hover:text-ink"
             >
               <HomeIcon size={16} />
-              홈으로
+              {t.home}
             </button>
           </div>
         </div>
@@ -581,12 +592,12 @@ export default function App() {
             <div className="mb-4 flex items-center justify-between">
               <h2 className="flex items-center gap-2 font-display text-xl">
                 <Podium size={20} />
-                글로벌 랭킹
+                {t.leaderboard}
               </h2>
               <button
                 onClick={() => setShowRanking(false)}
                 className="grid h-9 w-9 place-items-center rounded-chip border-[3px] border-ink bg-cream-dim text-ink transition active:scale-95"
-                aria-label="닫기"
+                aria-label={t.close}
               >
                 <Close size={16} />
               </button>
@@ -656,9 +667,7 @@ function ModeButton({
       </div>
       <div className="mt-1.5 text-[11px] font-semibold tabular-nums text-ink/70">
         {desc} ·{" "}
-        {best.heightM > 0
-          ? `내 최고 ${formatHeight(best.heightM)}m · ${best.blocks}블록`
-          : "아직 기록 없음"}
+        {best.heightM > 0 ? t.myBest(formatHeight(best.heightM), best.blocks) : t.noRecord}
       </div>
     </button>
   );

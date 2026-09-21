@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { Bars } from "../ui/icons";
+import { t } from "../i18n";
 
 /**
  * 이용 통계 (/stats) — 누구나 볼 수 있는 공개 페이지.
@@ -20,13 +21,19 @@ interface Stats {
   ads: { fill: number; empty: number; rate: number | null; avgSec: number | null };
 }
 
-const MODE_LABEL: Record<string, string> = { basic: "기본", random: "도전" };
+const MODE_LABEL: Record<string, string> = t.modeShort;
 const API_BASE = (import.meta.env.VITE_API_BASE ?? "/api").replace(/\/+$/, "");
 
 /** 한국 시간 기준 오늘/과거 날짜 (YYYY-MM-DD) — 서버와 같은 기준을 쓴다. */
 const kstDay = (back = 0) =>
   new Date(Date.now() + 9 * 3600_000 - back * 86_400_000).toISOString().slice(0, 10);
-const PRESETS: [string, number][] = [["7일", 7], ["14일", 14], ["30일", 30], ["90일", 90], ["1년", 366]];
+const PRESETS: [string, number][] = [
+  [t.statsRange["7"], 7],
+  [t.statsRange["14"], 14],
+  [t.statsRange["30"], 30],
+  [t.statsRange["90"], 90],
+  [t.statsRange["365"], 366],
+];
 
 export function StatsPage() {
   const [data, setData] = useState<Stats | null>(null);
@@ -100,7 +107,7 @@ export function StatsPage() {
       <Shell>
         {picker}
         <p className="py-10 text-center text-white/40">
-          {err ? "통계를 불러오지 못했어요" : "불러오는 중…"}
+          {err ? t.statsLoadFailed : t.loading}
         </p>
       </Shell>
     );
@@ -118,38 +125,38 @@ export function StatsPage() {
       {picker}
       {/* 요약 — 하나짜리 숫자는 차트로 그릴 게 아니라 그대로 크게 보여준다 */}
       <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-4">
-        <Tile label="오늘 방문자" value={totals.todayVisitors} />
-        <Tile label="오늘 판수" value={totals.todayGames} />
-        <Tile label="세션당 판수" value={totals.gamesPerSession} hint="기간 내 · 방문 1회당" />
-        <Tile label="등록된 기록" value={totals.scores} />
+        <Tile label={t.statsTodayVisitors} value={totals.todayVisitors} />
+        <Tile label={t.statsTodayGames} value={totals.todayGames} />
+        <Tile label={t.statsPerSession} value={totals.gamesPerSession} hint={t.statsPerSessionSub} />
+        <Tile label={t.statsScores} value={totals.scores} />
       </div>
 
       <Section
-        title={weekly ? "주별" : "일별"}
+        title={weekly ? t.statsWeekly : t.statsDaily}
         right={
           <button
             onClick={() => setAsTable((v) => !v)}
             className="rounded-lg bg-white/10 px-2.5 py-1 text-[11px] font-semibold text-white/70 transition hover:bg-white/20"
           >
-            {asTable ? "그래프로" : "표로"}
+            {asTable ? t.statsAsChart : t.statsAsTable}
           </button>
         }
       >
         {weekly && (
           <p className="mb-2 text-[11px] font-medium text-white/40">
-            기간이 길어 주 단위로 묶었어요 (각 주의 월요일 날짜)
+            {t.statsWeeklyNote}
           </p>
         )}
         <div className="mb-3 flex gap-4 text-[11px] font-semibold text-white/60">
-          <Legend color={VISITOR} label="방문자" />
-          <Legend color={GAMES} label="판수" />
+          <Legend color={VISITOR} label={t.statsVisitors} />
+          <Legend color={GAMES} label={t.statsGames} />
         </div>
 
         {daily.length === 0 ? (
-          <p className="py-8 text-center text-sm text-white/40">아직 기록이 없어요</p>
+          <p className="py-8 text-center text-sm text-white/40">{t.statsEmpty}</p>
         ) : asTable ? (
           <Table
-            head={[weekly ? "주 시작" : "날짜", "방문자", "시작", "완료", "등록"]}
+            head={[weekly ? t.statsWeekOf : t.statsDate, t.statsVisitors, t.statsStarts, t.statsEnds, t.statsSubmits]}
             rows={daily.map((d) => [d.day.slice(5), d.visitors, d.starts, d.ends, d.submits])}
           />
         ) : (
@@ -172,7 +179,7 @@ export function StatsPage() {
               <span>{daily[0].day.slice(5)}</span>
               {last && (
                 <span className="tabular-nums">
-                  최대 {max} · 마지막 날 방문자 {last.visitors} · 판수 {last.ends}
+                  {t.statsPeak(max, last.visitors, last.ends)}
                 </span>
               )}
             </div>
@@ -180,34 +187,34 @@ export function StatsPage() {
         )}
       </Section>
 
-      <Section title="광고">
+      <Section title={t.statsAds}>
         {/* 결과 창에 광고 자리가 뜬 횟수 중 실제로 채워진 비율. 0% 에 가까우면 재고 문제다. */}
         {ads.fill + ads.empty === 0 ? (
-          <p className="py-6 text-center text-sm text-white/40">아직 기록이 없어요</p>
+          <p className="py-6 text-center text-sm text-white/40">{t.statsEmpty}</p>
         ) : (
           <div className="grid grid-cols-3 gap-2.5">
-            <Tile label="응답률" value={ads.rate ?? 0} hint="광고가 채워진 비율(%)" />
-            <Tile label="채워짐" value={ads.fill} />
-            <Tile label="빈 응답" value={ads.empty} />
+            <Tile label={t.statsFillRate} value={ads.rate ?? 0} hint={t.statsFillRateSub} />
+            <Tile label={t.statsFilled} value={ads.fill} />
+            <Tile label={t.statsEmptyAd} value={ads.empty} />
           </div>
         )}
         {ads.avgSec != null && (
           <p className="mt-2 text-[11px] font-medium text-white/40">
-            채워질 때 평균 {ads.avgSec}초 걸려요
+            {t.statsAdAvgSec(ads.avgSec)}
           </p>
         )}
       </Section>
 
-      <Section title="단계별 횟수">
+      <Section title={t.statsFunnel}>
         {/* 같은 단위(횟수)라 한 축의 가로 막대로 비교한다. 한 번 방문해 여러 판을 하므로
             시작·종료가 방문보다 클 수 있다 — 기준은 방문 수가 아니라 가장 큰 값이다. */}
         <div className="space-y-2">
           {[
-            ["방문", funnel.visits],
-            ["게임 시작", funnel.starts],
-            ["게임 종료", funnel.ends],
-            ["랭킹 등록", funnel.submits],
-            ["공유", funnel.shares],
+            [t.statsVisit, funnel.visits],
+            [t.statsGameStart, funnel.starts],
+            [t.statsGameEnd, funnel.ends],
+            [t.statsRankSubmit, funnel.submits],
+            [t.statsShare, funnel.shares],
           ].map(([label, v]) => (
             <div key={label as string} className="flex items-center gap-3">
               <span className="w-16 shrink-0 text-[11px] font-semibold text-white/55">{label}</span>
@@ -226,13 +233,13 @@ export function StatsPage() {
         </div>
       </Section>
 
-      <Section title="모드별">
+      <Section title={t.statsByMode}>
         {/* 판수·높이·시간은 단위가 달라 한 그래프에 겹치지 않고 표로 둔다. 모두 선택한 기간 기준. */}
         {byMode.length === 0 ? (
-          <p className="py-6 text-center text-sm text-white/40">아직 기록이 없어요</p>
+          <p className="py-6 text-center text-sm text-white/40">{t.statsEmpty}</p>
         ) : (
           <Table
-            head={["모드", "판수", "평균 높이", "평균 블록", "평균 시간", "등록"]}
+            head={[t.statsMode, t.statsGames, t.statsAvgHeight, t.statsAvgBlocks, t.statsAvgTime, t.statsSubmits]}
             rows={byMode.map((m) => [
               MODE_LABEL[m.mode] ?? m.mode,
               m.games,
@@ -246,7 +253,7 @@ export function StatsPage() {
       </Section>
 
       <p className="mt-6 text-center text-[11px] text-white/30">
-        {data.range.from} ~ {data.range.to} · 한국 시간 기준 · <a href="/" className="underline hover:text-white/60">게임으로</a>
+        {data.range.from} ~ {data.range.to} · {t.statsKst} · <a href="/" className="underline hover:text-white/60">{t.statsBackToGame}</a>
       </p>
     </Shell>
   );
@@ -258,7 +265,7 @@ function Shell({ children }: { children: React.ReactNode }) {
       <div className="mx-auto w-full max-w-xl">
         <h1 className="mb-4 flex items-center gap-2 font-display text-xl text-cream">
           <Bars size={20} />
-          이용 통계
+          {t.statsTitle}
         </h1>
         {children}
       </div>

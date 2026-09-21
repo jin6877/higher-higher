@@ -3,6 +3,7 @@
 // visual is drawn by hand so we control the sky, camera and block styling.
 
 import Matter from "matter-js";
+import { t } from "../i18n";
 import {
   AIM_RANGE,
   FIXED_DT,
@@ -1348,7 +1349,7 @@ export class Game {
   captureScoreCard(): string {
     // On collapse the live blocks are already tumbling, so fall back to the
     // snapshot taken at the last placement (intact tower). On clear the tower
-    // still stands, so render live to include the "완주 성공!" state.
+    // still stands, so render live to include the cleared state.
     if (this.phase === "gameover" && this.lastCard) return this.lastCard;
     return this.renderScoreCard();
   }
@@ -1449,7 +1450,7 @@ export class Game {
     ctx.textAlign = "center";
     ctx.fillStyle = "rgba(255,255,255,0.85)";
     ctx.font = "700 40px -apple-system, sans-serif";
-    ctx.fillText(this.cleared ? "완주 성공!" : "기록", W / 2, 120);
+    ctx.fillText(this.cleared ? t.cardClear : t.cardResult, W / 2, 120);
 
     const grad = ctx.createLinearGradient(W / 2 - 260, 0, W / 2 + 260, 0);
     grad.addColorStop(0, "#FFD166");
@@ -1460,11 +1461,15 @@ export class Game {
 
     ctx.fillStyle = "rgba(255,255,255,0.8)";
     ctx.font = "600 44px -apple-system, sans-serif";
-    ctx.fillText(`블록 ${Math.max(this.peakBlocks, this.placedCount)} / ${TOTAL_BLOCKS}`, W / 2, 380);
+    ctx.fillText(
+      t.cardBlocks(Math.max(this.peakBlocks, this.placedCount), TOTAL_BLOCKS),
+      W / 2,
+      380,
+    );
 
     ctx.fillStyle = "rgba(255,255,255,0.55)";
     ctx.font = "700 40px -apple-system, sans-serif";
-    ctx.fillText("높이 높이 · Higher Higher", W / 2, H - 70);
+    ctx.fillText(t.cardBrand, W / 2, H - 70);
 
     return cv.toDataURL("image/png");
   }

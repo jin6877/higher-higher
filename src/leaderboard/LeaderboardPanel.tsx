@@ -8,6 +8,7 @@ import {
 } from "./api";
 import type { GameMode } from "../game/types";
 import { Close, Search, Tower } from "../ui/icons";
+import { t } from "../i18n";
 
 /**
  * Top N 랭킹 리스트. preload 가 있으면(제출 직후 받은 Top N) 그걸 그대로 그리고,
@@ -85,8 +86,8 @@ export function LeaderboardList({
         value={query}
         onChange={(e) => setQuery(e.target.value)}
         maxLength={20}
-        placeholder="닉네임으로 내 순위 찾기"
-        aria-label="랭킹 검색"
+        placeholder={t.rankSearchPlaceholder}
+        aria-label={t.rankSearchLabel}
         className="w-full rounded-slot border-[3px] border-ink bg-white py-2 pl-9 pr-9 text-sm font-semibold text-ink outline-none placeholder:text-ink/55 focus:border-pop"
       />
       <span className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-ink/65">
@@ -95,7 +96,7 @@ export function LeaderboardList({
       {query && (
         <button
           onClick={() => setQuery("")}
-          aria-label="검색어 지우기"
+          aria-label={t.clearSearch}
           className="absolute right-2 top-1/2 grid h-6 w-6 -translate-y-1/2 place-items-center rounded-chip bg-ink text-cream transition active:scale-95"
         >
           <Close size={12} />
@@ -106,21 +107,21 @@ export function LeaderboardList({
 
   let body;
   if (searching) {
-    body = <p className="py-5 text-center text-sm font-semibold text-ink/70">검색 중…</p>;
+    body = <p className="py-5 text-center text-sm font-semibold text-ink/70">{t.searching}</p>;
   } else if (isSearch && shown?.length === 0) {
     body = (
       <p className="py-5 text-center text-sm font-semibold text-ink/70">
-        &ldquo;{q}&rdquo; 기록을 찾지 못했어요
+        {t.noSearchHit(q)}
       </p>
     );
   } else if (!isSearch && err) {
-    body = <p className="py-5 text-center text-sm font-semibold text-ink/70">랭킹을 불러오지 못했어요</p>;
+    body = <p className="py-5 text-center text-sm font-semibold text-ink/70">{t.loadFailed}</p>;
   } else if (!shown) {
-    body = <p className="py-5 text-center text-sm font-semibold text-ink/70">불러오는 중…</p>;
+    body = <p className="py-5 text-center text-sm font-semibold text-ink/70">{t.loading}</p>;
   } else if (shown.length === 0) {
     body = (
       <p className="py-5 text-center text-sm font-semibold text-ink/70">
-        아직 기록이 없어요. 첫 주자가 되어보세요!
+        {t.noRecordsYet}
       </p>
     );
   } else {
@@ -163,7 +164,7 @@ export function LeaderboardList({
                   {heightCmToM(s.heightCm)}m
                 </span>
                 <span className="w-11 shrink-0 text-right text-[11px] font-semibold tabular-nums text-ink/70">
-                  {s.blocks}블록
+                  {t.blocksCount(s.blocks)}
                 </span>
               </button>
             </li>
@@ -179,7 +180,7 @@ export function LeaderboardList({
       {body}
       {searchable && !isSearch && rows && rows.length >= limit && (
         <p className="mt-2.5 text-center text-[11px] font-semibold text-ink/65">
-          상위 {limit}위까지 표시돼요 · 그 아래 순위는 검색으로 찾아보세요
+          {t.topOnly(limit)}
         </p>
       )}
       {selected && <TowerDetail entry={selected} onClose={() => setSelected(null)} />}
@@ -199,25 +200,25 @@ function TowerDetail({ entry, onClose }: { entry: ScoreEntry; onClose: () => voi
             <div className="truncate font-display text-lg text-cream">{entry.playerName}</div>
             <div className="text-xs font-semibold tabular-nums text-cream/60">
               <span className="text-gold">{heightCmToM(entry.heightCm)}m</span> ·{" "}
-              {entry.blocks}블록 · {entry.rank}위
+              {t.blocksCount(entry.blocks)} · {t.rankNth(entry.rank)}
             </div>
           </div>
           <button
             onClick={onClose}
             className="grid h-9 w-9 shrink-0 place-items-center rounded-chip border-[3px] border-ink bg-cream text-ink transition active:scale-95"
-            aria-label="닫기"
+            aria-label={t.close}
           >
             <Close size={15} />
           </button>
         </div>
         {failed ? (
           <div className="flex h-64 w-full items-center justify-center rounded-block border-[3px] border-cream/20 text-sm font-semibold text-cream/50">
-            탑 이미지를 불러오지 못했어요
+            {t.towerLoadFailed}
           </div>
         ) : (
           <img
             src={towerImageUrl(entry.id)}
-            alt={`${entry.playerName}의 탑`}
+            alt={t.towerOf(entry.playerName)}
             onError={() => setFailed(true)}
             className="max-h-[80vh] w-auto rounded-block border-[3px] border-ink"
           />
