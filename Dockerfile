@@ -9,6 +9,9 @@ RUN npm ci
 COPY index.html vite.config.ts tsconfig*.json ./
 COPY public ./public
 COPY src ./src
+# scripts/emit-meta.ts 가 빌드 끝에 dist/meta.json 을 쓴다(서버가 og 치환에 쓰는 값).
+# 빌드에 필요한 파일이므로 여기 빠지면 npm run build 가 통째로 실패한다.
+COPY scripts ./scripts
 RUN npm run build
 
 # ── 2) 서버 빌드(+ 네이티브 better-sqlite3) → prod node_modules + dist ──
