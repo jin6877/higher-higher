@@ -223,11 +223,90 @@ app.get("/api/stats", (req, res) => {
 });
 
 // ── 게임 정적 파일 (빌드된 dist) + SPA 폴백 ──
+//
+// index.html 은 그냥 내려주지 않고, 방문자 언어에 맞춰 제목·설명·og 를 갈아끼운다.
+// 게임 UI 는 브라우저에서 언어를 고르지만(src/i18n.ts), 카카오톡·트위터·검색 크롤러는
+// JS 를 돌리지 않아 그 결과를 보지 못한다 — 영어권에 링크를 공유하면 미리보기가
+// 한국어로 뜨게 된다. 그래서 메타만 여기서 바꾼다.
 const distDir = process.env.STATIC_DIR ?? path.join(__dirname, "..", "public");
-app.use(express.static(distDir));
-app.get("*", (_req, res) => {
-  res.sendFile(path.join(distDir, "index.html"));
-});
+
+interface DocMeta {
+  lang: string;
+  locale: string;
+  title: string;
+  desc: string;
+  ogDesc: string;
+}
+
+/** 게임 빌드가 내보낸 dist/meta.json (scripts/emit-meta.ts). 없으면 치환 없이 원본대로. */
+const META: Partial<Record<"ko" | "en", DocMeta>> = (() => {
+  try {
+    return JSON.parse(fs.readFileSync(path.join(distDir, "meta.json"), "utf8"));
+  } catch {
+    console.warn("meta.json 없음 — index.html 을 원본(한국어) 그대로 내려준다");
+    return {};
+  }
+})();
+
+/**
+ * 한국어로 볼 사람인가. 클라이언트(src/i18n.ts)와 같은 규칙을 쓴다 —
+ * Accept-Language 목록에 한국어가 하나라도 있으면 한국어. 해외에 있는 한국어 사용자에게
+ * 영어를 보여주는 게 더 나쁜 결과라서 "가장 앞 언어" 가 아니라 "포함 여부" 로 본다.
+ * ?lang= 가 있으면 그게 우선 — 공유 링크의 미리보기 언어를 지정할 수 있어야 한다.
+ */
+function wantsKorean(req: express.Request): boolean {
+  const q = req.query.lang;
+  if (q === "ko") return true;
+  if (q === "en") return false;
+  const header = String(req.headers["accept-language"] ?? "").trim();
+  // 단서가 없으면 원문 언어(한국어)로. 미리보기를 만드는 크롤러는 Accept-Language 를
+  // 안 보내는 경우가 많은데, 그때 영어를 내려주면 정작 주 사용자층인 카카오톡 공유
+  // 미리보기가 영어로 뜬다.
+  if (!header) return true;
+  return header
+    .split(",")
+    .some((part) => part.split(";")[0].trim().toLowerCase().startsWith("ko"));
+}
+
+// index.html 은 배포마다 바뀌므로 mtime 이 그대로일 때만 캐시한다.
+let htmlCache: { mtimeMs: number; html: string } | null = null;
+function indexHtml(): string {
+  const file = path.join(distDir, "index.html");
+  const { mtimeMs } = fs.statSync(file);
+  if (!htmlCache || htmlCache.mtimeMs !== mtimeMs) {
+    htmlCache = { mtimeMs, html: fs.readFileSync(file, "utf8") };
+  }
+  return htmlCache.html;
+}
+
+/** 한국어 원본의 값들을 영어 값으로 바꾼다. 같은 문자열이 title·og:title 에 함께 쓰여 전부 치환된다. */
+function localizeHtml(html: string, ko: DocMeta, en: DocMeta): string {
+  return html
+    .replace(`<html lang="${ko.lang}">`, `<html lang="${en.lang}">`)
+    .split(ko.locale)
+    .join(en.locale)
+    .split(ko.title)
+    .join(en.title)
+    .split(ko.desc)
+    .join(en.desc)
+    .split(ko.ogDesc)
+    .join(en.ogDesc);
+}
+
+function serveIndex(req: express.Request, res: express.Response): void {
+  let html = indexHtml();
+  const { ko, en } = META;
+  if (ko && en && !wantsKorean(req)) html = localizeHtml(html, ko, en);
+  // 같은 URL 이 언어에 따라 다른 내용을 주므로 중간 캐시가 한 벌만 들고 있으면 안 된다.
+  res.set("Vary", "Accept-Language");
+  res.set("Cache-Control", "no-cache");
+  res.type("html").send(html);
+}
+
+// '/' 와 '/index.html' 은 static 보다 먼저 잡아야 치환을 거친다.
+app.get(["/", "/index.html"], serveIndex);
+app.use(express.static(distDir, { index: false }));
+app.get("*", serveIndex);
 
 const port = Number(process.env.PORT ?? 8080);
 app.listen(port, () => {

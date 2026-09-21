@@ -13,6 +13,8 @@
  * 언어는 런타임에 바뀌지 않는다(바꾸면 setLang 이 새로고침한다). 그래서 t 를 모듈 상수로
  * 둘 수 있고, 캔버스를 그리는 엔진처럼 React 바깥에 있는 코드도 그냥 import 해서 쓴다.
  */
+import { META } from "./meta";
+
 export type Lang = "ko" | "en";
 
 const STORAGE_KEY = "hh.lang";
@@ -49,11 +51,6 @@ export function setLang(next: Lang): void {
 }
 
 const ko = {
-  htmlLang: "ko",
-  docTitle: "높이 높이 · Higher Higher",
-  docDesc:
-    "무너지기 전까지, 더 높이. 랜덤 블록을 물리로 쌓아 최고 높이에 도전하는 밸런스 게임.",
-
   brand: "높이 높이",
   brandSub: "HIGHER HIGHER",
   tagline: "무너지기 전까지, 더 높이",
@@ -187,11 +184,6 @@ type Strings = typeof ko;
 const plural = (n: number) => (n === 1 ? "" : "s");
 
 const en: Strings = {
-  htmlLang: "en",
-  docTitle: "Higher Higher · Stack the blocks",
-  docDesc:
-    "Stack until it falls. A physics balance game — drop random blocks and push your tower as high as it goes.",
-
   brand: "Higher Higher",
   brandSub: "PHYSICS STACKING GAME",
   tagline: "Stack it until it falls",
@@ -320,9 +312,14 @@ const en: Strings = {
 
 export const t: Strings = lang === "ko" ? ko : en;
 
-/** 문서 언어와 제목·설명을 고른 언어에 맞춘다. main.tsx 에서 한 번 호출. */
+/**
+ * 문서 언어와 제목·설명을 고른 언어에 맞춘다. main.tsx 에서 한 번 호출.
+ * og/twitter 태그는 여기서 손대지 않는다 — 크롤러는 JS 를 돌리지 않으므로
+ * 바꿔 봐야 미리보기에 반영되지 않는다. 그쪽은 서버가 처리한다(server/src/index.ts).
+ */
 export function applyDocumentLang(): void {
-  document.documentElement.lang = t.htmlLang;
-  document.title = t.docTitle;
-  document.querySelector('meta[name="description"]')?.setAttribute("content", t.docDesc);
+  const m = META[lang];
+  document.documentElement.lang = m.lang;
+  document.title = m.title;
+  document.querySelector('meta[name="description"]')?.setAttribute("content", m.desc);
 }
