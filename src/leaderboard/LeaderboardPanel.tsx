@@ -7,6 +7,7 @@ import {
   type ScoreEntry,
 } from "./api";
 import type { GameMode } from "../game/types";
+import { Close, Search, Tower } from "../ui/icons";
 
 /**
  * Top N 랭킹 리스트. preload 가 있으면(제출 직후 받은 Top N) 그걸 그대로 그리고,
@@ -86,18 +87,18 @@ export function LeaderboardList({
         maxLength={20}
         placeholder="닉네임으로 내 순위 찾기"
         aria-label="랭킹 검색"
-        className="w-full rounded-xl bg-white/10 py-2.5 pl-9 pr-9 text-sm font-semibold text-white outline-none ring-1 ring-white/10 placeholder:text-white/35 focus:ring-[#FFD166]/50"
+        className="w-full rounded-slot border-[3px] border-ink bg-white py-2 pl-9 pr-9 text-sm font-semibold text-ink outline-none placeholder:text-ink/55 focus:border-pop"
       />
-      <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-sm text-white/40">
-        🔍
+      <span className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-ink/65">
+        <Search size={17} />
       </span>
       {query && (
         <button
           onClick={() => setQuery("")}
           aria-label="검색어 지우기"
-          className="absolute right-2 top-1/2 grid h-6 w-6 -translate-y-1/2 place-items-center rounded-full bg-white/10 text-xs text-white/60 transition hover:bg-white/20"
+          className="absolute right-2 top-1/2 grid h-6 w-6 -translate-y-1/2 place-items-center rounded-chip bg-ink text-cream transition active:scale-95"
         >
-          ✕
+          <Close size={12} />
         </button>
       )}
     </div>
@@ -105,21 +106,21 @@ export function LeaderboardList({
 
   let body;
   if (searching) {
-    body = <p className="py-5 text-center text-sm text-white/40">검색 중…</p>;
+    body = <p className="py-5 text-center text-sm font-semibold text-ink/70">검색 중…</p>;
   } else if (isSearch && shown?.length === 0) {
     body = (
-      <p className="py-5 text-center text-sm text-white/40">
+      <p className="py-5 text-center text-sm font-semibold text-ink/70">
         &ldquo;{q}&rdquo; 기록을 찾지 못했어요
       </p>
     );
   } else if (!isSearch && err) {
-    body = <p className="py-5 text-center text-sm text-white/40">랭킹을 불러오지 못했어요</p>;
+    body = <p className="py-5 text-center text-sm font-semibold text-ink/70">랭킹을 불러오지 못했어요</p>;
   } else if (!shown) {
-    body = <p className="py-5 text-center text-sm text-white/40">불러오는 중…</p>;
+    body = <p className="py-5 text-center text-sm font-semibold text-ink/70">불러오는 중…</p>;
   } else if (shown.length === 0) {
     body = (
-      <p className="py-5 text-center text-sm text-white/40">
-        아직 기록이 없어요. 첫 주자가 되어보세요! 🚀
+      <p className="py-5 text-center text-sm font-semibold text-ink/70">
+        아직 기록이 없어요. 첫 주자가 되어보세요!
       </p>
     );
   } else {
@@ -128,8 +129,15 @@ export function LeaderboardList({
         {shown.map((s, i) => {
           const mine = !!highlightName && s.playerName === highlightName;
           // 메달은 목록 위치가 아니라 실제 순위 기준 — 검색 결과의 57위가 금메달을 달면 안 된다.
-          const medal =
-            s.rank === 1 ? "🥇" : s.rank === 2 ? "🥈" : s.rank === 3 ? "🥉" : `${s.rank}`;
+          // 이모지 메달 대신 색 칩 + 숫자. 4위 이하와 모양이 같아 줄이 흔들리지 않는다.
+          const chip =
+            s.rank === 1
+              ? "bg-gold"
+              : s.rank === 2
+                ? "bg-silver"
+                : s.rank === 3
+                  ? "bg-bronze"
+                  : "bg-ink/10";
           const clickable = s.hasImage;
           return (
             <li key={`${s.id}-${i}`}>
@@ -137,22 +145,24 @@ export function LeaderboardList({
                 type="button"
                 disabled={!clickable}
                 onClick={() => clickable && setSelected(s)}
-                className={`flex w-full items-center gap-2.5 rounded-xl px-3 py-2 text-left transition ${
-                  mine ? "bg-[#FFD166]/20 ring-1 ring-[#FFD166]/50" : "bg-white/5"
-                } ${clickable ? "cursor-pointer hover:bg-white/12 active:scale-[0.99]" : "cursor-default"}`}
+                className={`flex w-full items-center gap-2.5 rounded-slot border-[3px] px-2.5 py-2 text-left transition ${
+                  mine ? "border-pop bg-gold" : "border-ink/15 bg-cream-dim"
+                } ${clickable ? "cursor-pointer active:scale-[0.99]" : "cursor-default"}`}
               >
-                <span className="w-7 shrink-0 text-center text-sm font-bold tabular-nums text-white/70">
-                  {medal}
+                <span
+                  className={`grid h-6 w-6 shrink-0 place-items-center rounded-chip text-[11px] font-bold tabular-nums text-ink ${chip}`}
+                >
+                  {s.rank}
                 </span>
                 <MiniTower ratio={maxCm > 0 ? s.heightCm / maxCm : 0} />
-                <span className="flex-1 truncate text-sm font-semibold">
-                  {s.playerName}
-                  {clickable && <span className="ml-1.5 text-xs text-white/35">🗼</span>}
+                <span className="flex flex-1 items-center gap-1 truncate text-sm font-bold text-ink">
+                  <span className="truncate">{s.playerName}</span>
+                  {clickable && <Tower size={13} className="shrink-0 text-ink/40" />}
                 </span>
-                <span className="shrink-0 text-sm font-extrabold tabular-nums text-[#FFD166]">
+                <span className="shrink-0 text-sm font-bold tabular-nums text-ink">
                   {heightCmToM(s.heightCm)}m
                 </span>
-                <span className="w-12 shrink-0 text-right text-xs tabular-nums text-white/45">
+                <span className="w-11 shrink-0 text-right text-[11px] font-semibold tabular-nums text-ink/70">
                   {s.blocks}블록
                 </span>
               </button>
@@ -168,7 +178,7 @@ export function LeaderboardList({
       {search}
       {body}
       {searchable && !isSearch && rows && rows.length >= limit && (
-        <p className="mt-2.5 text-center text-[11px] font-medium text-white/35">
+        <p className="mt-2.5 text-center text-[11px] font-semibold text-ink/65">
           상위 {limit}위까지 표시돼요 · 그 아래 순위는 검색으로 찾아보세요
         </p>
       )}
@@ -182,26 +192,26 @@ function TowerDetail({ entry, onClose }: { entry: ScoreEntry; onClose: () => voi
   const [failed, setFailed] = useState(false);
   return (
     <div className="fixed inset-0 z-[60] flex items-center justify-center px-4 pt-[max(1rem,env(safe-area-inset-top,0px))] pb-[max(1rem,env(safe-area-inset-bottom,0px))]">
-      <div className="absolute inset-0 bg-black/80" onClick={onClose} />
+      <div className="absolute inset-0 bg-night/85" onClick={onClose} />
       <div className="pointer-events-auto relative flex max-h-full w-full max-w-xs flex-col items-center">
-        <div className="mb-2 flex w-full items-center justify-between px-1">
+        <div className="mb-2.5 flex w-full items-center justify-between gap-2 px-1">
           <div className="min-w-0">
-            <div className="truncate text-base font-black">{entry.playerName}</div>
-            <div className="text-xs font-semibold text-white/55">
-              <span className="text-[#FFD166]">{heightCmToM(entry.heightCm)}m</span> ·{" "}
+            <div className="truncate font-display text-lg text-cream">{entry.playerName}</div>
+            <div className="text-xs font-semibold tabular-nums text-cream/60">
+              <span className="text-gold">{heightCmToM(entry.heightCm)}m</span> ·{" "}
               {entry.blocks}블록 · {entry.rank}위
             </div>
           </div>
           <button
             onClick={onClose}
-            className="grid h-8 w-8 shrink-0 place-items-center rounded-full bg-white/10 text-white/70 transition hover:bg-white/20"
+            className="grid h-9 w-9 shrink-0 place-items-center rounded-chip border-[3px] border-ink bg-cream text-ink transition active:scale-95"
             aria-label="닫기"
           >
-            ✕
+            <Close size={15} />
           </button>
         </div>
         {failed ? (
-          <div className="flex h-64 w-full items-center justify-center rounded-2xl bg-white/5 text-sm text-white/40">
+          <div className="flex h-64 w-full items-center justify-center rounded-block border-[3px] border-cream/20 text-sm font-semibold text-cream/50">
             탑 이미지를 불러오지 못했어요
           </div>
         ) : (
@@ -209,7 +219,7 @@ function TowerDetail({ entry, onClose }: { entry: ScoreEntry; onClose: () => voi
             src={towerImageUrl(entry.id)}
             alt={`${entry.playerName}의 탑`}
             onError={() => setFailed(true)}
-            className="max-h-[80vh] w-auto rounded-2xl border border-white/10 shadow-2xl"
+            className="max-h-[80vh] w-auto rounded-block border-[3px] border-ink"
           />
         )}
       </div>

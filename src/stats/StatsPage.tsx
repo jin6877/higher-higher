@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { Bars } from "../ui/icons";
 
 /**
  * 이용 통계 (/stats) — 누구나 볼 수 있는 공개 페이지.
@@ -255,7 +256,10 @@ function Shell({ children }: { children: React.ReactNode }) {
   return (
     <div className="min-h-full bg-[#0b1026] px-4 pb-10 pt-[max(1.5rem,calc(env(safe-area-inset-top,0px)+1rem))] text-white">
       <div className="mx-auto w-full max-w-xl">
-        <h1 className="mb-4 text-xl font-black tracking-tight">📊 이용 통계</h1>
+        <h1 className="mb-4 flex items-center gap-2 font-display text-xl text-cream">
+          <Bars size={20} />
+          이용 통계
+        </h1>
         {children}
       </div>
     </div>

@@ -25,3 +25,6 @@ dist-ssr
 
 # Vercel
 .vercel
+
+# Playwright MCP 산출물(스냅샷·스크린샷) — 도구가 만든 임시 파일
+.playwright-mcp

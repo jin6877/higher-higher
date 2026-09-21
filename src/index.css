@@ -1,5 +1,55 @@
 @import "tailwindcss";
 
+/* ── 아케이드 토큰 ────────────────────────────────────────────────────────────
+   전에는 값을 그때그때 골라 썼다(white/5 · /10 · /12 · /35 · /45 · /55 · /60 · /70 · /75 · /85,
+   rounded-md ~ 3xl 혼용, font-black 남발). 값이 많은 게 문제가 아니라 '고른 흔적' 이 문제라
+   화면이 어수선해 보였다. => 쓸 값을 여기 정해 두고 utility 로만 꺼내 쓴다.
+   새 값이 필요하면 임의값(bg-[#...])을 쓰지 말고 이 목록에 먼저 추가할 것.
+
+   아케이드 방향의 핵심은 "투명도를 안 쓴다" 는 것이다. 불투명한 면 + 잉크 테두리 +
+   번지지 않는 하드 그림자. 블러는 캔버스 위 HUD 에만 남긴다. */
+@theme {
+  /* 면 — ink 는 테두리·글자, cream 은 판 */
+  --color-ink: #241640;
+  --color-cream: #fff4e2;
+  --color-cream-dim: #ede0c8; /* 크림 판 위에서 한 단계 들어간 자리(광고 칸 등) */
+
+  /* 강조 — pop 은 '도전/주요 행동', gold 는 '기록', mint 는 '쉬움' */
+  --color-pop: #ff3d7f;
+  --color-gold: #ffc93c;
+  --color-mint: #00c896;
+
+  /* 1·2·3 위 칩. 이모지 메달(🥇🥈🥉)을 대신한다 — 4위 이하와 모양이 같아지고,
+     숫자가 고정폭이라 줄이 흔들리지 않는다. */
+  --color-silver: #c9d2e6;
+  --color-bronze: #c98a5b;
+
+  /* 하늘(게임 배경과 같은 계열) — 모달 바깥 어둡게 깔 때 */
+  --color-night: #0b1026;
+
+  /* 테두리 두께는 3px 고정. 하드 그림자는 두 단계만. */
+  --shadow-hard: 3px 3px 0 var(--color-ink);
+  --shadow-hard-md: 5px 5px 0 var(--color-ink);
+  --shadow-hard-lg: 7px 7px 0 var(--color-ink);
+
+  /* 모서리 — 칩 / 입력·광고 / 버튼·카드 / 모달 */
+  --radius-chip: 999px;
+  --radius-slot: 12px;
+  --radius-block: 16px;
+  --radius-panel: 22px;
+
+  --font-display: "Black Han Sans", "Pretendard", "Apple SD Gothic Neo", sans-serif;
+}
+
+/* 아케이드의 글자 그림자 — 번지는 그림자(drop-shadow/blur)가 아니라 잉크로 한 번 더 찍은
+   인쇄물 느낌. 제목에만 쓴다. */
+@utility text-hard {
+  text-shadow: 3px 3px 0 var(--color-ink);
+}
+@utility text-hard-lg {
+  text-shadow: 4px 4px 0 var(--color-ink);
+}
+
 :root {
   color-scheme: dark;
 }

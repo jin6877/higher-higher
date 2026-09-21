@@ -5,6 +5,20 @@ import { formatHeight, loadRecord } from "./game/logic";
 import { dimLabel } from "./game/dimensions";
 import type { GameMode, HudState, ShapeKind } from "./game/types";
 import { AdFit } from "./ads/AdFit";
+import {
+  Card as CardIcon,
+  Check,
+  Close,
+  Collapse,
+  Flag,
+  Home as HomeIcon,
+  Podium,
+  Replay,
+  Share,
+  VolumeOff,
+  VolumeOn,
+  Wobble,
+} from "./ui/icons";
 import { logEvent } from "./analytics";
 import { LeaderboardList } from "./leaderboard/LeaderboardPanel";
 import {
@@ -237,7 +251,7 @@ export default function App() {
   return (
     <div
       className="relative h-full w-full overflow-hidden bg-[#0b1026] text-white select-none"
-      // 노치 아래에서 시작하는 상단 기준선 — HUD 와 🔊 버튼이 이 줄에 선다.
+      // 노치 아래에서 시작하는 상단 기준선 — HUD 와 소리 버튼이 이 줄에 선다.
       // engine.ts hudBottom() 이 이 값 + HUD 높이 102px 를 전제로 탑 현황 패널을 배치한다.
       style={{ "--top-line": "max(1rem, calc(env(safe-area-inset-top, 0px) + 0.5rem))" } as CSSProperties}
     >
@@ -250,12 +264,12 @@ export default function App() {
           HUD 바로 아래로 내린다 (engine.ts drawMinimap 이 같은 기준으로 그 아래부터 패널을 그린다) */}
       <button
         onClick={toggleMute}
-        className={`pointer-events-auto absolute right-[max(0.75rem,env(safe-area-inset-right,0px))] top-[var(--top-line)] z-30 grid h-10 w-10 place-items-center rounded-full bg-white/10 backdrop-blur-md transition hover:bg-white/20 active:scale-95 ${
+        className={`pointer-events-auto absolute right-[max(0.75rem,env(safe-area-inset-right,0px))] top-[var(--top-line)] z-30 grid h-11 w-11 place-items-center rounded-chip border-[3px] border-ink bg-cream text-ink shadow-hard transition active:translate-x-[3px] active:translate-y-[3px] active:shadow-none ${
           phase === "playing" ? "max-[560px]:top-[calc(var(--top-line)+104px)]" : ""
         }`}
         aria-label="소리 켜기/끄기"
       >
-        {muted ? "🔇" : "🔊"}
+        {muted ? <VolumeOff size={21} /> : <VolumeOn size={21} />}
       </button>
 
       {/* ================= HUD (playing) ================= */}
@@ -263,47 +277,49 @@ export default function App() {
         <>
           <div className="pointer-events-none absolute inset-x-0 top-0 z-20 px-4 pt-[var(--top-line)]">
             <div className="mx-auto flex max-w-md items-start justify-between gap-3">
-              <div className="rounded-2xl bg-black/30 px-4 py-2 backdrop-blur-md">
-                <div className="text-[11px] font-semibold tracking-wide text-white/60">높이</div>
-                <div className="text-3xl font-extrabold leading-none tabular-nums">
+              <div className="rounded-slot border-[3px] border-ink bg-ink/90 px-4 py-2">
+                <div className="text-[11px] font-bold tracking-wide text-cream/65">높이</div>
+                {/* 실시간으로 바뀌는 숫자는 본문 서체 + tabular-nums 로 둔다 — 디스플레이
+                    서체(Black Han Sans)는 고정폭 숫자가 없어서 자릿수마다 폭이 흔들린다. */}
+                <div className="text-3xl font-bold leading-none tabular-nums text-cream">
                   {formatHeight(hud.heightM)}
-                  <span className="ml-0.5 text-lg font-bold text-white/70">m</span>
+                  <span className="ml-0.5 text-lg text-cream/65">m</span>
                 </div>
               </div>
 
               {/* next-block preview */}
-              <div className="flex flex-col items-center rounded-2xl bg-black/30 px-3 py-1.5 backdrop-blur-md">
-                <div className="text-[10px] font-semibold tracking-wide text-white/55">다음</div>
+              <div className="flex flex-col items-center rounded-slot border-[3px] border-ink bg-ink/90 px-3 py-1.5">
+                <div className="text-[10px] font-bold tracking-wide text-cream/60">다음</div>
                 <div className="mt-0.5 grid h-9 w-9 place-items-center">
                   {hud.next ? (
                     <ShapePreview kind={hud.next.kind} color={hud.next.color} />
                   ) : (
-                    <div className="h-6 w-6 rounded-md bg-white/10" />
+                    <div className="h-6 w-6 rounded-md bg-cream/15" />
                   )}
                 </div>
                 {hud.next && (
-                  <div className="mt-0.5 text-[10px] font-bold leading-none tabular-nums text-white/75">
+                  <div className="mt-0.5 text-[10px] font-bold leading-none tabular-nums text-cream/80">
                     {dimLabel(hud.next)}
                   </div>
                 )}
               </div>
 
-              <div className="rounded-2xl bg-black/30 px-4 py-2 text-right backdrop-blur-md">
-                <div className="text-[11px] font-semibold tracking-wide text-white/60">블록</div>
-                <div className="text-3xl font-extrabold leading-none tabular-nums">
+              <div className="rounded-slot border-[3px] border-ink bg-ink/90 px-4 py-2 text-right">
+                <div className="text-[11px] font-bold tracking-wide text-cream/65">블록</div>
+                <div className="text-3xl font-bold leading-none tabular-nums text-cream">
                   {hud.placed}
-                  <span className="text-lg font-bold text-white/50">/{hud.total}</span>
+                  <span className="text-lg text-cream/55">/{hud.total}</span>
                 </div>
               </div>
             </div>
             {/* progress */}
-            <div className="mx-auto mt-2 h-1.5 max-w-md overflow-hidden rounded-full bg-white/15">
+            <div className="mx-auto mt-2 h-2 max-w-md overflow-hidden rounded-chip border-2 border-ink bg-ink/80">
               <div
-                className="h-full rounded-full bg-gradient-to-r from-[#FFD166] to-[#FF6B9D] transition-[width] duration-300"
+                className="h-full bg-gold transition-[width] duration-300"
                 style={{ width: `${(hud.placed / hud.total) * 100}%` }}
               />
             </div>
-            <div className="mx-auto mt-1 max-w-md text-center text-[11px] font-medium text-white/45">
+            <div className="mx-auto mt-1 max-w-md text-center text-[11px] font-semibold text-cream/55">
               {MODE_LABEL[hud.mode]} · 최고 {formatHeight(hud.bestM)}m · {hud.bestBlocks}블록
             </div>
           </div>
@@ -311,8 +327,9 @@ export default function App() {
           {/* wobble warning */}
           {hud.wobble > 0.28 && (
             <div className="pointer-events-none absolute inset-x-0 top-32 z-20 flex justify-center">
-              <div className="animate-pulse rounded-full bg-red-500/85 px-4 py-1.5 text-sm font-bold shadow-lg">
-                ⚠ 휘청거려요!
+              <div className="flex animate-pulse items-center gap-1.5 rounded-chip border-[3px] border-ink bg-gold px-4 py-1.5 text-sm font-bold text-ink shadow-hard">
+                <Wobble size={17} />
+                휘청거려요!
               </div>
             </div>
           )}
@@ -322,26 +339,26 @@ export default function App() {
             <div className="mx-auto flex max-w-md items-center justify-center gap-3">
               <button
                 onClick={() => gameRef.current?.rotate(-1)}
-                className="pointer-events-auto grid h-14 w-14 shrink-0 place-items-center rounded-2xl bg-white/12 text-2xl backdrop-blur-md transition hover:bg-white/20 active:scale-95"
+                className="pointer-events-auto grid h-14 w-14 shrink-0 place-items-center rounded-block border-[3px] border-ink bg-cream text-2xl text-ink shadow-hard transition active:translate-x-[3px] active:translate-y-[3px] active:shadow-none"
                 aria-label="반시계 회전"
               >
                 ↺
               </button>
               <button
                 onClick={() => gameRef.current?.drop()}
-                className="pointer-events-auto h-14 flex-1 rounded-2xl bg-gradient-to-r from-[#FF6B9D] to-[#FFD166] text-lg font-extrabold text-[#2a0f28] shadow-lg shadow-pink-500/20 transition hover:brightness-110 active:scale-[0.98]"
+                className="pointer-events-auto h-14 flex-1 rounded-block border-[3px] border-ink bg-pop font-display text-xl text-ink shadow-hard-md transition active:translate-x-[5px] active:translate-y-[5px] active:shadow-none"
               >
                 떨어뜨리기
               </button>
               <button
                 onClick={() => gameRef.current?.rotate(1)}
-                className="pointer-events-auto grid h-14 w-14 shrink-0 place-items-center rounded-2xl bg-white/12 text-2xl backdrop-blur-md transition hover:bg-white/20 active:scale-95"
+                className="pointer-events-auto grid h-14 w-14 shrink-0 place-items-center rounded-block border-[3px] border-ink bg-cream text-2xl text-ink shadow-hard transition active:translate-x-[3px] active:translate-y-[3px] active:shadow-none"
                 aria-label="시계 회전"
               >
                 ↻
               </button>
             </div>
-            <p className="mt-2 text-center text-[11px] font-medium text-white/40">
+            <p className="mt-2 text-center text-[11px] font-semibold text-cream/55">
               블록이 좌우로 왕복해요 · 탭 / 스페이스로 드롭 · ↺↻ 회전
             </p>
           </div>
@@ -356,32 +373,43 @@ export default function App() {
               engine.ts isWide() 가 같은 기준으로, 재어 넘긴 빈칸(syncHomeFrame)에 탑을 세운다. */}
           <div className="relative flex flex-1 flex-col items-center justify-center px-6 pt-[calc(env(safe-area-inset-top,0px)+1.5rem)] pb-[max(1.5rem,calc(env(safe-area-inset-bottom,0px)+1rem))] text-center [@media(max-aspect-ratio:5/4)]:justify-between">
             <div ref={homeTopRef} className="animate-[rise_0.7s_ease-out]">
-              <h1 className="bg-gradient-to-br from-white via-[#FFE7B0] to-[#FF9EC4] bg-clip-text text-6xl font-black leading-[0.95] tracking-tight text-transparent drop-shadow-[0_4px_20px_rgba(255,107,157,0.25)] sm:text-7xl">
+              <h1 className="text-hard-lg font-display text-[54px] leading-[0.98] text-cream sm:text-7xl">
                 높이 높이
               </h1>
-              <p className="mt-2 text-lg font-bold tracking-[0.35em] text-white/55">
+              <p className="mt-3 text-xs font-bold tracking-[0.3em] text-cream/60">
                 HIGHER HIGHER
               </p>
-              <p className="mx-auto mt-5 max-w-sm text-base font-medium leading-relaxed text-white/75">
-                무너지기 전까지, 더 높이. 블록을 하나씩 쌓아 올려
-                <br className="hidden sm:block" /> 최고 높이 기록에 도전하세요.
+              <div className="mt-5 inline-block rounded-chip border-[3px] border-ink bg-gold px-4 py-1.5 shadow-hard">
+                <span className="text-xs font-bold tracking-wide text-ink">
+                  무너지기 전까지, 더 높이
+                </span>
+              </div>
+              <p className="mx-auto mt-4 max-w-sm text-sm font-semibold leading-relaxed text-cream/75">
+                블록을 하나씩 쌓아 최고 높이 기록에 도전하세요.
               </p>
             </div>
 
             <div ref={homeBottomRef} className="mt-8 flex flex-col items-center">
               {/* 모드 선택 — 기본은 정사각형만 나와서 쉽고, 도전은 기존처럼 랜덤 블록이 나온다.
                   각 버튼 아래에 그 모드의 내 최고 기록을 보여준다(기록·순위표 모두 모드별). */}
-              <div className="pointer-events-auto flex w-full max-w-xs animate-[rise_0.9s_ease-out] flex-col gap-2.5">
+              {/* 하드 그림자(5px)가 아래 버튼에 닿지 않게 간격을 한 단계 넓혔다. */}
+              <div className="pointer-events-auto flex w-full max-w-xs animate-[rise_0.9s_ease-out] flex-col gap-4">
+                {/* 색을 뒤집었다 — 전에는 제일 튀는 색(핑크)이 '기본' 에 붙어 있었는데,
+                    실제로는 도전 모드가 전체 판수의 70% 가 넘는다. 강조색은 많이 하는 쪽에.
+                    tone 만 바꾸면 되니 되돌리거나 mint 로 바꾸는 건 한 단어다. */}
                 <ModeButton
-                  primary
+                  tone="cream"
                   title="기본 모드"
-                  desc="정사각형만 · 쉬움"
+                  badge="쉬움"
+                  desc="정사각형만"
                   best={bestOf("basic")}
                   onClick={() => start("basic")}
                 />
                 <ModeButton
+                  tone="pop"
                   title="도전 모드"
-                  desc="랜덤 블록"
+                  badge="랜덤"
+                  desc="모양이 매번 바뀜"
                   best={bestOf("random")}
                   onClick={() => start("random")}
                 />
@@ -392,9 +420,10 @@ export default function App() {
                   logEvent("rank");
                   setShowRanking(true);
                 }}
-                className="pointer-events-auto mt-3 animate-[rise_1s_ease-out] rounded-2xl bg-white/10 px-6 py-2.5 text-sm font-bold text-white/80 backdrop-blur-md transition hover:bg-white/20 active:scale-95"
+                className="pointer-events-auto mt-5 flex animate-[rise_1s_ease-out] items-center gap-2 rounded-chip border-[3px] border-cream bg-ink/60 px-6 py-2.5 text-sm font-bold text-cream transition active:scale-95"
               >
-                🏆 글로벌 랭킹
+                <Podium size={18} />
+                글로벌 랭킹
               </button>
             </div>
           </div>
@@ -406,25 +435,30 @@ export default function App() {
           모달이 길어져 '다시 하기' 가 화면 밖으로 밀리지 않게 한다. */}
       {(phase === "gameover" || phase === "clear") && showModal && hud && (
         <div className="absolute inset-0 z-30 flex items-center justify-center px-4 pt-[max(1rem,env(safe-area-inset-top,0px))] pb-[max(1rem,env(safe-area-inset-bottom,0px))] sm:px-6">
-          <div className="pointer-events-none absolute inset-0 bg-black/45 backdrop-blur-[2px]" />
-          <div className="pointer-events-auto relative max-h-full w-full max-w-sm animate-[pop-in_0.35s_ease-out] overflow-y-auto rounded-3xl border border-white/10 bg-[#12173a]/95 p-5 text-center shadow-2xl sm:p-6">
-            <div className="text-4xl sm:text-5xl">{phase === "clear" ? "🏆" : "💥"}</div>
-            <h2 className="mt-2 text-2xl font-black tracking-tight">
+          <div className="pointer-events-none absolute inset-0 bg-night/70" />
+          <div className="pointer-events-auto relative max-h-full w-full max-w-sm animate-[pop-in_0.35s_ease-out] overflow-y-auto rounded-panel border-[3px] border-ink bg-cream p-4 text-center text-ink shadow-hard-lg sm:p-5">
+            <div className="flex justify-center text-pop">
+              {phase === "clear" ? <Flag size={44} /> : <Collapse size={44} />}
+            </div>
+            <h2 className="mt-2 font-display text-[28px] leading-tight">
               {phase === "clear" ? "완주 성공!" : "탑이 무너졌어요"}
             </h2>
-            <p className="mt-1 text-sm text-white/60">
-              {phase === "clear" ? "100블록을 모두 쌓았어요 🎉" : "균형을 잃고 와르르…"}
+            <p className="mt-1 text-sm font-semibold text-ink/70">
+              {phase === "clear" ? "100블록을 모두 쌓았어요" : "균형을 잃고 와르르…"}
             </p>
 
-            <div className="mt-5 flex gap-3">
-              <Stat label="도달 높이" value={`${formatHeight(hud.peakM)}m`} />
-              <Stat label="블록" value={`${hud.peakBlocks}/${hud.total}`} />
+            <div className="mt-4 flex gap-2.5">
+              <Stat tone="gold" label="도달 높이" value={`${formatHeight(hud.peakM)}m`} />
+              <Stat tone="mint" label="블록" value={`${hud.peakBlocks}/${hud.total}`} />
             </div>
-            <div className="mt-3 rounded-2xl bg-white/5 py-2 text-sm font-semibold text-white/70">
-              🏆 {MODE_LABEL[hud.mode]} 최고 {formatHeight(hud.bestM)}m · {hud.bestBlocks}블록
+            <div className="mt-2.5 flex items-center gap-2 rounded-block bg-ink px-3 py-2.5 text-left">
+              <Podium size={17} className="shrink-0 text-gold" />
+              <span className="flex-1 text-[12px] font-bold tabular-nums text-cream">
+                {MODE_LABEL[hud.mode]} 최고 {formatHeight(hud.bestM)}m · {hud.bestBlocks}블록
+              </span>
               {hud.peakM >= hud.bestM - 0.05 && hud.peakM > 0 && (
-                <span className="ml-2 rounded-full bg-[#FFD166] px-2 py-0.5 text-[11px] font-bold text-[#3a2a00]">
-                  신기록!
+                <span className="shrink-0 rounded-chip bg-pop px-2 py-0.5 text-[10px] font-bold text-ink">
+                  신기록
                 </span>
               )}
             </div>
@@ -436,17 +470,19 @@ export default function App() {
               unit={RESULT_AD_UNIT}
               width={320}
               height={100}
-              className="-mx-5 mt-4 max-[339px]:hidden sm:-mx-6"
+              // 모달 안쪽 여백(p-4 / sm:p-5)을 상쇄해 광고가 판 끝까지 쓰게 한다.
+              className="-mx-4 mt-4 max-[339px]:hidden sm:-mx-5"
             />
 
             {/* ===== 글로벌 랭킹 등록 / 결과 ===== */}
             {hud.peakBlocks > 0 && (
-              <div className="mt-4 rounded-2xl bg-white/5 p-3">
+              <div className="mt-4 rounded-block border-[3px] border-ink bg-cream-dim p-3">
                 {submitState === "done" && result ? (
                   <>
-                    <div className="mb-2 text-sm font-bold text-white/80">
-                      🏆 내 순위 <span className="text-[#FFD166]">#{result.rank}</span>
-                      <span className="ml-1 font-medium text-white/45">
+                    <div className="mb-2 flex items-center gap-1.5 text-sm font-bold text-ink">
+                      <Podium size={16} />내 순위{" "}
+                      <span className="font-display text-lg">#{result.rank}</span>
+                      <span className="font-semibold text-ink/70">
                         / 총 {result.totalCount}명
                       </span>
                     </div>
@@ -459,7 +495,7 @@ export default function App() {
                   </>
                 ) : (
                   <>
-                    <div className="mb-2 text-left text-xs font-semibold text-white/55">
+                    <div className="mb-2 text-left text-xs font-bold text-ink/70">
                       글로벌 랭킹에 기록을 남겨보세요
                     </div>
                     <div className="flex gap-2">
@@ -468,18 +504,19 @@ export default function App() {
                         onChange={(e) => setName(e.target.value)}
                         maxLength={20}
                         placeholder="닉네임"
-                        className="min-w-0 flex-1 rounded-xl bg-white/10 px-3 py-2.5 text-sm font-semibold text-white outline-none ring-1 ring-white/10 placeholder:text-white/35 focus:ring-[#FFD166]/50"
+                        aria-label="닉네임"
+                        className="min-w-0 flex-1 rounded-slot border-[3px] border-ink bg-white px-3 py-2 text-sm font-semibold text-ink outline-none placeholder:text-ink/55 focus:border-pop"
                       />
                       <button
                         onClick={submit}
                         disabled={submitState === "sending"}
-                        className="shrink-0 rounded-xl bg-gradient-to-r from-[#FF6B9D] to-[#FFD166] px-4 py-2.5 text-sm font-extrabold text-[#2a0f28] transition hover:brightness-110 active:scale-95 disabled:opacity-60"
+                        className="shrink-0 rounded-slot border-[3px] border-ink bg-ink px-4 py-2 text-sm font-bold text-cream transition active:scale-95 disabled:opacity-60"
                       >
-                        {submitState === "sending" ? "등록 중…" : "랭킹 등록"}
+                        {submitState === "sending" ? "등록 중…" : "등록"}
                       </button>
                     </div>
                     {submitState === "error" && (
-                      <p className="mt-2 text-left text-xs font-medium text-red-300">
+                      <p className="mt-2 text-left text-xs font-bold text-pop">
                         등록에 실패했어요. 잠시 후 다시 시도해주세요.
                       </p>
                     )}
@@ -492,7 +529,7 @@ export default function App() {
               <img
                 src={card}
                 alt="결과 카드"
-                className="mt-4 w-full rounded-2xl border border-white/10 shadow-lg"
+                className="mt-4 w-full rounded-block border-[3px] border-ink"
               />
             )}
 
@@ -502,27 +539,31 @@ export default function App() {
               <button
                 onClick={reset}
                 disabled={retryLeft > 0}
-                className="rounded-2xl bg-gradient-to-r from-[#FF6B9D] to-[#FFD166] py-3 font-extrabold text-[#2a0f28] tabular-nums transition hover:brightness-110 active:scale-95 disabled:cursor-default disabled:opacity-50 disabled:hover:brightness-100 disabled:active:scale-100"
+                className="flex items-center justify-center gap-2 rounded-block border-[3px] border-ink bg-pop py-3 font-display text-lg text-ink tabular-nums shadow-hard transition enabled:active:translate-x-[3px] enabled:active:translate-y-[3px] enabled:active:shadow-none disabled:cursor-default disabled:opacity-50"
               >
+                <Replay size={19} />
                 {retryLeft > 0 ? `다시 하기 ${retryLeft}` : "다시 하기"}
               </button>
               <button
                 onClick={shareLink}
-                className="rounded-2xl bg-white/12 py-3 font-bold text-white/90 backdrop-blur-md transition hover:bg-white/20 active:scale-95"
+                className="flex items-center justify-center gap-2 rounded-block border-[3px] border-ink bg-cream py-3 text-[15px] font-bold text-ink shadow-hard transition active:translate-x-[3px] active:translate-y-[3px] active:shadow-none"
               >
-                {shareCopied ? "링크 복사됨! 📋" : "🔗 공유하기"}
+                {shareCopied ? <Check size={18} /> : <Share size={18} />}
+                {shareCopied ? "복사됨" : "공유하기"}
               </button>
             </div>
             <button
               onClick={card ? shareCard : makeCard}
-              className="mt-3 w-full rounded-2xl bg-white/[0.08] py-2.5 text-sm font-semibold text-white/70 backdrop-blur-md transition hover:bg-white/15 active:scale-95"
+              className="mt-3 flex w-full items-center justify-center gap-2 rounded-block border-[3px] border-ink py-2.5 text-sm font-bold text-ink transition active:scale-[0.98]"
             >
-              {card ? "🖼️ 결과 카드 저장 / 공유" : "🖼️ 결과 카드 만들기"}
+              <CardIcon size={18} />
+              {card ? "결과 카드 저장 / 공유" : "결과 카드 만들기"}
             </button>
             <button
               onClick={home}
-              className="mt-3 text-sm font-semibold text-white/45 transition hover:text-white/70"
+              className="mt-3 inline-flex items-center gap-1.5 text-sm font-bold text-ink/70 transition hover:text-ink"
             >
+              <HomeIcon size={16} />
               홈으로
             </button>
           </div>
@@ -533,27 +574,30 @@ export default function App() {
       {showRanking && (
         <div className="absolute inset-0 z-40 flex items-center justify-center px-6 pt-[max(1.5rem,calc(env(safe-area-inset-top,0px)+0.5rem))] pb-[max(1.5rem,calc(env(safe-area-inset-bottom,0px)+0.5rem))]">
           <div
-            className="absolute inset-0 bg-black/55"
+            className="absolute inset-0 bg-night/70"
             onClick={() => setShowRanking(false)}
           />
-          <div className="pointer-events-auto relative max-h-full w-full max-w-sm overflow-y-auto rounded-3xl border border-white/10 bg-[#12173a]/95 p-6 shadow-2xl">
+          <div className="pointer-events-auto relative max-h-full w-full max-w-sm overflow-y-auto rounded-panel border-[3px] border-ink bg-cream p-5 text-ink shadow-hard-lg">
             <div className="mb-4 flex items-center justify-between">
-              <h2 className="text-xl font-black tracking-tight">🏆 글로벌 랭킹</h2>
+              <h2 className="flex items-center gap-2 font-display text-xl">
+                <Podium size={20} />
+                글로벌 랭킹
+              </h2>
               <button
                 onClick={() => setShowRanking(false)}
-                className="grid h-8 w-8 place-items-center rounded-full bg-white/10 text-white/70 transition hover:bg-white/20"
+                className="grid h-9 w-9 place-items-center rounded-chip border-[3px] border-ink bg-cream-dim text-ink transition active:scale-95"
                 aria-label="닫기"
               >
-                ✕
+                <Close size={16} />
               </button>
             </div>
-            <div className="mb-3 flex gap-1 rounded-xl bg-white/5 p-1">
+            <div className="mb-3 flex gap-1.5 rounded-slot border-[3px] border-ink bg-cream-dim p-1">
               {(["basic", "random"] as GameMode[]).map((m) => (
                 <button
                   key={m}
                   onClick={() => setRankMode(m)}
-                  className={`flex-1 rounded-lg py-1.5 text-xs font-bold transition ${
-                    rankMode === m ? "bg-white/15 text-white" : "text-white/50 hover:text-white/80"
+                  className={`flex-1 rounded-[7px] py-1.5 text-xs font-bold transition ${
+                    rankMode === m ? "bg-ink text-cream" : "text-ink/70 hover:text-ink"
                   }`}
                 >
                   {MODE_LABEL[m]}
@@ -576,34 +620,45 @@ export default function App() {
 /** 홈의 모드 선택 버튼 — 제목·설명과 그 모드의 내 최고 기록. */
 function ModeButton({
   title,
+  badge,
   desc,
   best,
   onClick,
-  primary = false,
+  tone,
 }: {
   title: string;
+  /** 오른쪽 작은 칩 — 난이도/성격 한 단어. */
+  badge: string;
   desc: string;
   best: { heightM: number; blocks: number };
   onClick: () => void;
-  primary?: boolean;
+  tone: "cream" | "pop";
 }) {
+  const pop = tone === "pop";
   return (
     <button
       onClick={onClick}
-      className={`w-full rounded-2xl px-5 py-3 text-left transition active:scale-[0.98] ${
-        primary
-          ? "bg-gradient-to-r from-[#FF6B9D] to-[#FFD166] text-[#2a0f28] shadow-xl shadow-pink-500/25 hover:brightness-110"
-          : "bg-white/12 text-white backdrop-blur-md hover:bg-white/20"
+      // 눌림은 scale 이 아니라 '그림자만큼 밀려 들어가는' 방식 — 하드 그림자 문법에선
+      // 이쪽이 실제로 눌리는 물건처럼 읽힌다.
+      className={`w-full rounded-block border-[3px] border-ink px-4 py-3.5 text-left text-ink shadow-hard-md transition active:translate-x-[5px] active:translate-y-[5px] active:shadow-none ${
+        pop ? "bg-pop" : "bg-cream"
       }`}
     >
-      <div className="flex items-baseline justify-between gap-2">
-        <span className="text-lg font-extrabold">{title}</span>
-        <span className={`text-[11px] font-semibold ${primary ? "text-[#2a0f28]/70" : "text-white/55"}`}>
-          {desc}
+      <div className="flex items-center justify-between gap-2">
+        <span className="font-display text-xl">{title}</span>
+        <span
+          className={`shrink-0 rounded-chip border-2 border-ink px-2 py-0.5 text-[11px] font-bold ${
+            pop ? "bg-cream" : "bg-mint"
+          }`}
+        >
+          {badge}
         </span>
       </div>
-      <div className={`mt-0.5 text-[11px] font-semibold ${primary ? "text-[#2a0f28]/65" : "text-white/45"}`}>
-        {best.heightM > 0 ? `내 최고 ${formatHeight(best.heightM)}m · ${best.blocks}블록` : "아직 기록 없음"}
+      <div className="mt-1.5 text-[11px] font-semibold tabular-nums text-ink/70">
+        {desc} ·{" "}
+        {best.heightM > 0
+          ? `내 최고 ${formatHeight(best.heightM)}m · ${best.blocks}블록`
+          : "아직 기록 없음"}
       </div>
     </button>
   );
@@ -616,11 +671,24 @@ function layoutTop(el: HTMLElement): number {
   return y;
 }
 
-function Stat({ label, value }: { label: string; value: string }) {
+/** 결과 창의 지표 한 칸. 값은 판이 끝난 뒤 고정이라 디스플레이 서체를 써도 흔들릴 일이 없다. */
+function Stat({
+  label,
+  value,
+  tone,
+}: {
+  label: string;
+  value: string;
+  tone: "gold" | "mint";
+}) {
   return (
-    <div className="flex-1 rounded-2xl bg-white/5 py-3">
-      <div className="text-[11px] font-semibold tracking-wide text-white/50">{label}</div>
-      <div className="text-2xl font-extrabold tabular-nums">{value}</div>
+    <div
+      className={`flex-1 rounded-block border-[3px] border-ink px-3 py-2.5 text-left ${
+        tone === "gold" ? "bg-gold" : "bg-mint"
+      }`}
+    >
+      <div className="text-[11px] font-bold text-ink/70">{label}</div>
+      <div className="mt-0.5 font-display text-[26px] leading-none text-ink">{value}</div>
     </div>
   );
 }
